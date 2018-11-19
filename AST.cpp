@@ -1,6 +1,28 @@
 #include "AST.h"
+
+
+template<class T>
+std::vector<T> difference(std::vector<T> a, std::vector<T> b) {
+    std::vector<T> ret(a.size() + b.size());
+    std::sort(a.begin(), a.end());
+    std::sort(b.begin(), b.end());
+    auto it = std::set_difference(a.begin(), a.end(), b.begin(), b.end(), ret.begin());
+    ret.resize(it-ret.begin());
+    return ret;
+}
+template<class T>
+std::vector<T> intersection(std::vector<T> a, std::vector<T> b) {
+    std::vector<T> ret(a.size() + b.size());
+    std::sort(a.begin(), a.end());
+    std::sort(b.begin(), b.end());
+    auto it = std::set_intersection(a.begin(), a.end(), b.begin(), b.end(), ret.begin());
+    ret.resize(it-ret.begin());
+    return ret;
+}
+
 namespace AST
 {
+    std::map<std::string, ClassStruct*> ASTNode::classTable_;
     void ASTNode::json_indent(std::ostream& out, unsigned int indent){
         for (unsigned int i=0; i<indent; i++){
                 out << "  ";
@@ -170,5 +192,243 @@ namespace AST
         this->json_head(out, indent, "Not");
         this->json_child(out, indent, "expr_", this->expr_);
         this->json_close(out, indent);
+    }
+    
+    bool Program::typeCheck() {
+        bool failed = false;
+        checkClassHierarchy(failed);
+        if (!failed){
+            buildLCAs(failed);
+            if (!failed) {
+                for (auto it : this->classTable_) {
+                    std::cout << "\t" << it.first;
+                }
+                std::cout << std::endl;
+                for (auto it1 : this->classTable_) {
+                    std::cout << it1.first << "\t";
+                    for (auto it2 : this->classTable_) {
+                        std::cout << it1.second->LCA[it2.second]->name << "\t";
+                    }
+                    std::cout << std::endl;
+                }
+            }
+            buildMethodTables(failed);
+            if (!failed) {
+                for (auto it : this->classTable_) {
+                    ClassStruct *cs = it.second;
+                    for (auto it2 : cs->methodTable) {
+                        MethodStruct *ms = it2.second;
+                        std::cout << cs->name << "." << ms->name << "(";
+                        std::string sep = "";
+                        for (ClassStruct *arg : ms->argTypes) {
+                            std::cout << sep << arg->name;
+                            sep = ", ";
+                        }
+                        std::cout << ") : " << ms->type->name << std::endl;
+                    }
+                }
+            }
+            getClassFields(failed);
+        }
+        return failed;
+    }
+    void Program::buildClassMap(bool &failed) {
+        std::string name, super;
+        ClassStruct *cs;
+        static ClassStruct *builtins[] = { 
+            new ClassStruct({"Obj",     nullptr }), 
+            new ClassStruct({"Nothing", builtins[0] }), 
+            new ClassStruct({"Int",     builtins[0] }), 
+            new ClassStruct({"String",  builtins[0] }), 
+            new ClassStruct({"Boolean", builtins[0] }) 
+        };
+        for (ClassStruct *cs : builtins) {
+            this->classTable_[cs->name] = cs;
+        }
+        //Get class declarations
+        for (Class *c : *this->classes_) {
+            name = c->getName();
+            if (classTable_.find(name) == classTable_.end()) {
+                cs = new ClassStruct({name, nullptr});
+                classTable_[name] = cs;
+                c->setClassStruct(cs);
+            } else {
+                std::cerr << c->getPosition() << " Error: Redefinition of class \"" << name << "\"" << std::endl;
+                failed = true;
+            }
+        }
+        //Find class inheritance
+        for (Class *c : *this->classes_) {
+            name = c->getName();
+            super = c->getExtends();
+            if (classTable_.find(super) == classTable_.end()) {
+                std::cerr << c->getPosition() << " Error: Class \"" << name << "\" extends unrecognized type \"" << super << "\"" << std::endl;
+                failed = true;
+            } else if (std::find(std::begin(builtins)+1, std::end(builtins), classTable_[super]) != std::end(builtins)) {
+                std::cerr << c->getPosition() << " Error: Class \"" << name << "\" cannot derive from builtin type \"" << super << "\"" << std::endl;
+                failed = true;
+            } else {
+                 c->getClassStruct()->super = classTable_[super];
+            }
+        }
+    }
+    
+    void Program::checkClassHierarchy(bool &failed) {
+        bool foundCycle;
+        ClassStruct *curr1, *curr2;
+        std::map<ClassStruct*, bool> noCycles;
+        
+        buildClassMap(failed);
+        for (auto it : this->classTable_) {
+            ClassStruct *cs = it.second;
+            if (!cs->super) {
+                noCycles[cs] = true;
+            } else {
+                noCycles[cs] = false;
+            }
+        }
+        for (auto it : this->classTable_) {
+            ClassStruct *cs = it.second;
+            foundCycle = false;
+            curr1 = cs;
+            if (noCycles[curr1])
+                continue;
+            curr2 = curr1->super;
+            while (!noCycles[curr1] && !noCycles[curr2]) {
+                if (curr1 == curr2) {
+                    std::cerr << "Error: Class hierarchy contains a cycle involving class \"" << curr1->name << "\"" << std::endl;
+                    failed = true;
+                    foundCycle = true;
+                    break;
+                }
+                if (curr1->super) {
+                    curr1 = curr1->super;
+                } else {
+                    break;
+                }
+                if (curr2->super && curr2->super->super) {
+                    curr2 = curr2->super->super;
+                } else {
+                    break;
+                }
+            }
+            if (!foundCycle) {
+                curr1 = cs;
+                while (!noCycles[curr1]) {
+                    noCycles[curr1] = true;
+                    if (curr1->super) {
+                        curr1 = curr1->super;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    void Program::buildLCAs(bool &failed) {
+         for (auto it : this->classTable_) {
+            ClassStruct *first = it.second;
+            first->LCA[first] = first;
+            ClassStruct *curr = first;
+            while (curr->super != nullptr) {
+                for (auto currLCAs : curr->super->LCA) {
+                    if (first->LCA.find(currLCAs.first) == first->LCA.end()) {
+                        first->LCA[currLCAs.first] = currLCAs.second;
+                        currLCAs.first->LCA[first] = currLCAs.second;
+                    }
+                }
+                curr->LCA[curr->super] = curr->super;
+                curr->super->LCA[curr] = curr->super;
+                curr = curr->super;
+            }
+        }
+        size_t classCount = this->classTable_.size();
+        for (auto it: this->classTable_) {
+            ClassStruct *cs = it.second;
+            if (cs->LCA.size() != classCount) {
+                std::cerr << "Unable to complete LCA table for class \"" << cs->name << "\" " << std::endl;
+                failed = true;
+            }
+        }
+    }
+    void Program::buildMethodTables(bool &failed) {
+        ClassStruct *cs, *argType;
+        MethodStruct *ms;
+        std::string methodName, argTypeName;
+        for (Class *c : *this->classes_) {
+            cs = c->getClassStruct();
+            for (Method *m : *c->getMethods()) {
+                methodName = m->getName();
+                if (cs->methodTable.find(methodName) != cs->methodTable.end()) {
+                    std::cerr << m->getPosition() << " Error: Redefinition of method \"" << cs->name << "." << methodName << "\"" << std::endl;
+                    failed = true;
+                } else {
+                    ms = new MethodStruct({m->getName(), cs});
+                    for (TypedArg *arg : *m->getArgs()) {
+                        argTypeName = arg->getType();
+                        if (this->classTable_.find(argTypeName) == this->classTable_.end()) {
+                            std::cerr << arg->getPosition() << " Error: Argument \"" << arg->getName()
+                                    << "\" of method \"" << cs->name << "." << ms->name << "()\""
+                                    << " has unrecognized type \"" << argTypeName << "\"" << std::endl;
+                            failed = true;
+                        }else{
+                            argType = this->classTable_[arg->getType()];
+                            ms->argTypes.push_back(argType);
+                        }
+                    }
+                    ms->type = this->classTable_[m->getType()];
+                    cs->methodTable[methodName] = ms;
+                }
+            }
+        }
+    }
+    void Program::checkMethodInheritance(bool &failed) {
+        std::map<ClassStruct*, bool> checked;
+        std::stack<ClassStruct*> classStack;
+        ClassStruct *curr;
+        MethodStruct *ms, *super_ms;
+        for (auto it : this->classTable_) {
+            if (it.second->super == nullptr) {
+                checked[it.second] = true;
+            } else {
+                checked[it.second] = false;
+            }
+        }
+        for (auto it : this->classTable_) {
+            curr = it.second;
+            while (!checked[curr]) {
+                classStack.push(curr);
+                curr = curr->super;
+            }
+            while (!classStack.empty()) {
+                curr = classStack.top();
+                classStack.pop();
+                for (auto mthdKeyValue : curr->super->methodTable) {
+                    if (curr->methodTable.find(mthdKeyValue.first) != curr->methodTable.end()) {
+                        ms = curr->methodTable[mthdKeyValue.first];
+                        super_ms = mthdKeyValue.second;
+                        if (ms->type->LCA[super_ms->type] != super_ms->type) {
+                            std::cerr << "Error: Inherited method \"" << curr->name << "." << ms->name << "()\" does not return a subtype of its overridden method" << std::endl;
+                            failed = true;
+                        }
+                        if (ms->argTypes.size() != super_ms->argTypes.size()) {
+                            std::cerr << "Error: Inherited method \"" << curr->name << "." << ms->name << "()\" does not share the same number of arguments as its overridden method" << std::endl;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    void Program::getClassFields(bool &failed) {
+        std::vector<std::string> fields;
+        for (Class *c : *this->classes_) {
+            for (Statement *s : *c->getStatements()) {
+                s->getFields(fields, failed);
+            }
+            for (std::string field : fields) {
+                c->getClassStruct()->fieldTable[field] = nullptr;
+            }
+            fields.clear();
+        }
     }
 }

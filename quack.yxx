@@ -22,7 +22,7 @@
 %define parse.trace
 
 %parse-param { yy::Lexer& lexer }  /* Construct parser object with lexer */
-%parse-param { AST::ASTNode **root }
+%parse-param { AST::Program **root }
 
 %code{
     #include "lex.yy.h"
@@ -102,11 +102,11 @@ classes: class         { $$ = new std::vector<AST::Class*>(); $$->push_back($1);
 opt_statements: statements { $$ = $1; }
               |            { $$ = new std::vector<AST::Statement*>(); }
 
-statements: statement            { $$ = new std::vector<AST::Statement*>(); $$->push_back($1); }
-          | statements statement { $$ = $1; $$->push_back($2); }
+statements: statement            { $$ = new std::vector<AST::Statement*>(); $$->push_back($1); $1->set_position(@1.begin.line, @1.begin.column, @1.end.line, @1.end.column, @1.begin.filename); }
+          | statements statement { $$ = $1; $$->push_back($2); $2->set_position(@2.begin.line, @2.begin.column, @2.end.line, @2.end.column, @2.begin.filename); }
 
-class: CLASS IDENT '(' opt_typed_args ')' extends '{' opt_statements opt_methods '}' { $$ = new AST::Class($2, $4, $6, $8, $9); }
-     | CLASS IDENT '(' opt_typed_args ')' '{' opt_statements opt_methods '}' { $$ = new AST::Class($2, $4, "Nothing", $7, $8); }
+class: CLASS IDENT '(' opt_typed_args ')' extends '{' opt_statements opt_methods '}' { $$ = new AST::Class($2, $4, $6, $8, $9); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+     | CLASS IDENT '(' opt_typed_args ')' '{' opt_statements opt_methods '}' { $$ = new AST::Class($2, $4, "Obj", $7, $8); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
 extends: EXTENDS IDENT { $$ = $2; }
 
@@ -116,7 +116,7 @@ opt_typed_args: typed_args { $$ = $1; }
 typed_args: typed_arg                { $$ = new std::vector<AST::TypedArg*>(); $$->push_back($1); }
           | typed_args ',' typed_arg { $$ = $1; $$->push_back($3); }
 
-typed_arg: IDENT ':' IDENT { $$ = new AST::TypedArg($1, $3); }
+typed_arg: IDENT ':' IDENT { $$ = new AST::TypedArg($1, $3); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
 opt_methods: methods { $$ = $1; }
            |         { $$ = new std::vector<AST::Method*>(); }
@@ -124,25 +124,25 @@ opt_methods: methods { $$ = $1; }
 methods: method         { $$ = new std::vector<AST::Method*>(); $$->push_back($1); }
        | methods method { $$ = $1; $$->push_back($2); }
 
-method: DEF IDENT '(' opt_typed_args ')' ':' IDENT '{' opt_statements '}' { $$ = new AST::Method($2, $4, $7, $9); }
-      | DEF IDENT '(' opt_typed_args ')' '{' opt_statements '}'           { $$ = new AST::Method($2, $4, $7); }
+method: DEF IDENT '(' opt_typed_args ')' ':' IDENT '{' opt_statements '}' { $$ = new AST::Method($2, $4, $7, $9); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | DEF IDENT '(' opt_typed_args ')' '{' opt_statements '}'           { $$ = new AST::Method($2, $4, $7);     $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
 statement: if_block                            { $$ = $1; }
-         | WHILE r_expr '{' opt_statements '}' { $$ = new AST::While($2, $4); }
-         | IDENT '=' r_expr ';'                { $$ = new AST::Assignment(new AST::LExpr($1), $3); }
-         | field '=' r_expr ';'                { $$ = new AST::Assignment($1, $3); }
-         | IDENT ':' IDENT '=' r_expr ';'      { $$ = new AST::Assignment(new AST::LExpr($1), $3, $5); }
-         | field ':' IDENT '=' r_expr ';'      { $$ = new AST::Assignment($1, $3, $5); }
+         | WHILE r_expr '{' opt_statements '}' { $$ = new AST::While($2, $4); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+         | IDENT '=' r_expr ';'                { $$ = new AST::Assignment(new AST::LExpr($1), $3); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+         | field '=' r_expr ';'                { $$ = new AST::Assignment($1, $3); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+         | IDENT ':' IDENT '=' r_expr ';'      { $$ = new AST::Assignment(new AST::LExpr($1), $3, $5); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+         | field ':' IDENT '=' r_expr ';'      { $$ = new AST::Assignment($1, $3, $5); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
          | r_expr ';'                          { $$ = $1; }
-         | RETURN ';'                          { $$ = new AST::Return(); }
-         | RETURN r_expr ';'                   { $$ = new AST::Return($2); }
+         | RETURN ';'                          { $$ = new AST::Return(); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+         | RETURN r_expr ';'                   { $$ = new AST::Return($2); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
          | typecase                            { $$ = $1; }
 
 if_block: IF r_expr '{' opt_statements '}' opt_elifs opt_else   
         { 
             $$ = new AST::If($2, $4); 
             AST::If *curr = $$;
-            for (AST::If *elif: *$6) {
+            for (AST::If *elif : *$6) {
                 std::vector<AST::Statement*> *new_else = new std::vector<AST::Statement*>();
                 new_else->push_back(elif);
                 curr->set_else(new_else);
@@ -150,6 +150,7 @@ if_block: IF r_expr '{' opt_statements '}' opt_elifs opt_else
             }
             curr->set_else($7);
             delete $6;
+            $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename);
         }
 
 opt_elifs: elifs { $$ = $1;}
@@ -158,7 +159,7 @@ opt_elifs: elifs { $$ = $1;}
 elifs: elif       { $$ = new std::vector<AST::If*>(); $$->push_back($1); }
      | elifs elif { $$ = $1; $$->push_back($2); }
 
-elif: ELIF r_expr '{' opt_statements '}' { $$ = new AST::If($2, $4, NULL); }
+elif: ELIF r_expr '{' opt_statements '}' { $$ = new AST::If($2, $4, NULL); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
 opt_else: else { $$ = new std::vector<AST::Statement*>(); $$ = $1; }
         |      { $$ = new std::vector<AST::Statement*>(); }
@@ -171,35 +172,35 @@ opt_actuals: '(' actuals ')' { $$ = new std::vector<AST::RExpr*>(); $$ = $2; }
 actuals: r_expr         { $$ = new std::vector<AST::RExpr*>(); $$->push_back($1); }
        | actuals ',' r_expr { $$ = new std::vector<AST::RExpr*>();  }
 
-r_expr: STRING_LIT             { $$ = new AST::StrLit($1); }
-      | INT_LIT                { $$ = new AST::IntLit($1); }
-      | IDENT                  { $$ = new AST::LExpr($1); }
+r_expr: STRING_LIT             { $$ = new AST::StrLit($1); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | INT_LIT                { $$ = new AST::IntLit($1); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | IDENT                  { $$ = new AST::LExpr($1); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
       | field                  { $$ = $1; }
-      | IDENT opt_actuals      { $$ = new AST::Constructor($1, $2); }
+      | IDENT opt_actuals      { $$ = new AST::Constructor($1, $2); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
       | '(' r_expr ')'         { $$ = $2; }
-      | r_expr '+' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "PLUS",    args); }
-      | r_expr '-' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "MINUS",   args); }
-      | r_expr '*' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "TIMES",   args); }
-      | r_expr '/' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "DIVIDE",  args); }
-      | r_expr EQUALS r_expr   { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "EQUALS",  args); }
-      | r_expr ATMOST r_expr   { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "ATMOST",  args); }
-      | r_expr '<' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "LESS",    args); }
-      | r_expr ATLEAST r_expr  { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "ATLEAST", args); }
-      | r_expr '>' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "MORE", args); }
-      | r_expr AND r_expr      { $$ = new AST::And($1, $3); }
-      | r_expr OR r_expr       { $$ = new AST::Or($1, $3); }
-      | NOT r_expr             { $$ = new AST::Not($2); }
-      | '-' r_expr             { $$ = new AST::Call($2, "MINUS", new std::vector<AST::RExpr*>()); }
-      | r_expr '.' IDENT opt_actuals { $$ = new AST::Call($1, $3, $4); }
+      | r_expr '+' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "PLUS",    args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr '-' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "MINUS",   args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr '*' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "TIMES",   args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr '/' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "DIVIDE",  args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr EQUALS r_expr   { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "EQUALS",  args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr ATMOST r_expr   { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "ATMOST",  args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr '<' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "LESS",    args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr ATLEAST r_expr  { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "ATLEAST", args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr '>' r_expr      { std::vector<AST::RExpr*> *args = new std::vector<AST::RExpr*>(); args->push_back($3); $$ = new AST::Call($1, "MORE",    args); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr AND r_expr      { $$ = new AST::And($1, $3); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr OR r_expr       { $$ = new AST::Or($1, $3); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | NOT r_expr             { $$ = new AST::Not($2); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | '-' r_expr             { $$ = new AST::Call($2, "MINUS", new std::vector<AST::RExpr*>()); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
+      | r_expr '.' IDENT opt_actuals { $$ = new AST::Call($1, $3, $4); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
-field: r_expr '.' IDENT { $$ = new AST::LExpr($1, $3); }
+field: r_expr '.' IDENT { $$ = new AST::LExpr($1, $3); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
-typecase: TYPECASE r_expr '{' type_alternatives '}' { $$ = new AST::Typecase($2, $4); }
+typecase: TYPECASE r_expr '{' type_alternatives '}' { $$ = new AST::Typecase($2, $4); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
 type_alternatives: type_alternative                   { $$->push_back($1); }
                  | type_alternatives type_alternative { $$ = $1; $$->push_back($2); }
 
-type_alternative: IDENT ':' IDENT '{' opt_statements '}' { $$ = new AST::TypeAlt($1, $3, $5); }
+type_alternative: IDENT ':' IDENT '{' opt_statements '}' { $$ = new AST::TypeAlt($1, $3, $5); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
 
 %%
 #include "Messages.h"
