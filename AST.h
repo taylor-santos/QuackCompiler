@@ -407,7 +407,16 @@ namespace AST {
                 if (l_expr_->isAssignable()) {
                     if (std::find(init.begin(), init.end(), varName) == init.end()) {
                         init.push_back(varName);
-                        table[varName] = std::pair<ClassStruct*, bool>(nullptr, false);
+                        if (isTyped_) {
+                            if (this->classTable.find(this->type_) != this->classTable.end()) {
+                                table[varName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                            } else {
+                                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" given unrecognized explicit type \"" << this->type_ << "\"" << std::endl;
+                                failed = true;
+                            }
+                            
+                        }
+                       
                     }
                 } else {
                     std::cerr << this->getPosition() << " Error: Cannot assign to variable \"" << varName << "\"" << std::endl;
@@ -428,20 +437,45 @@ namespace AST {
                         } else {
                             prevType = thisClass->fieldTable[l_expr_name].first;
                             if (prevType == nullptr) {
-                                thisClass->fieldTable[l_expr_name] = std::pair<ClassTable*, bool>(r_expr_type, false);
+                                thisClass->fieldTable[l_expr_name] = std::pair<ClassStruct*, bool>(r_expr_type, false);
                                 changed = true;
                             } else {
                                 LCAType = prevType->LCA[r_expr_type];
                                 if (LCAType != prevType) {
                                     if (thisClass->fieldTable[l_expr_name].second) {
                                         std::cerr << this->getPosition() << " Error: Field \"" << l_expr_name << "\" cannot be assigned to type \"" 
-                                                << r_expr_type->name << "\" because it was given explicit type \"" << prevType->name << "\"" << std::endl;
+                                                << r_expr_type->name << "\" because it is not a subtype of its explicit type \"" << prevType->name << "\"" << std::endl;
+                                        failed = true;
+                                    } else {
+                                        thisClass->fieldTable[l_expr_name] = std::pair<ClassStruct*, bool>(LCAType, false);
+                                        changed = true;
                                     }
                                 }
                             }
                         }
                     } else {
-
+                        if (thisMethod->symbolTable.find(l_expr_name) == thisMethod->symbolTable.end()) {
+                            std::cerr << this->getPosition() << " Error: Variable \"" << l_expr_name << "\" does not exist in the current context" << std::endl;
+                            failed = true;
+                        } else {
+                            prevType = thisMethod->symbolTable[l_expr_name].first;
+                            if (prevType == nullptr) {
+                                thisMethod->symbolTable[l_expr_name] = std::pair<ClassStruct*, bool>(r_expr_type, false);
+                                changed = true;
+                            } else {
+                                LCAType = prevType->LCA[r_expr_type];
+                                if (LCAType != prevType) {
+                                    if (thisMethod->symbolTable[l_expr_name].second) {
+                                        std::cerr << this->getPosition() << " Error: Variable \"" << l_expr_name << "\" cannot be assigned to type \"" 
+                                                << r_expr_type->name << "\" because it is not a subtype of its explicit type \"" << prevType->name << "\"" << std::endl;
+                                        failed = true;
+                                    } else {
+                                        thisMethod->symbolTable[l_expr_name] = std::pair<ClassStruct*, bool>(LCAType, false);
+                                        changed = true;
+                                    }
+                                }
+                            }
+                        }
                     }
                 } else {
                     std::cerr << this->getPosition() << " Error: Cannot assign to variable \"" << l_expr_name << "\"" << std::endl;
@@ -486,11 +520,10 @@ namespace AST {
         std::vector<Statement*> *stmts_;
     public:
         TypeAlt(std::string name, std::string type, std::vector<Statement*> *stmts): name_(name), type_(type), stmts_(stmts) {}
-        void json(std::ostream &out, unsigned int indent = 0);
-
         std::vector<Statement*>* getStatements() const {
             return stmts_;
         }
+        void json(std::ostream &out, unsigned int indent = 0);
     };
     
     class Typecase : public Statement {
@@ -531,6 +564,9 @@ namespace AST {
             }
             fields = retFields;
             init = retInit;
+        }
+        virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+            
         }
         void json(std::ostream &out, unsigned int indent = 0);
     };
