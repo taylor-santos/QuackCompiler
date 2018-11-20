@@ -13,7 +13,10 @@ template<class T>
 std::vector<T> difference(std::vector<T> a, std::vector<T> b);
 template<class T>
 std::vector<T> intersection(std::vector<T> a, std::vector<T> b);
-
+template<class K, class V>
+std::pair<std::map<K, V>, std::map<K, std::pair<V, V>>> map_intersection(std::map<K, V> a, std::map<K, V> b);
+template<class K, class V>
+std::map<K, V> map_difference(std::map<K, V> a, std::map<K, V> b);
 namespace AST {
     struct ClassStruct {
         std::string name;
@@ -100,7 +103,7 @@ namespace AST {
     
     class Statement : public ASTNode {
     public:
-        virtual void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) = 0;
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) = 0;
         virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {}
     };
     
@@ -209,33 +212,29 @@ namespace AST {
         If(RExpr *cond, std::vector<Statement*> *if_stmts, std::vector<Statement*> *else_stmts): cond_(cond), if_true_stmts_(if_stmts), if_false_stmts_(else_stmts) {}
         If(RExpr *cond, std::vector<Statement*> *if_stmts): cond_(cond), if_true_stmts_(if_stmts), if_false_stmts_(new std::vector<Statement*>()) {}
         void set_else(std::vector<Statement*> *else_stmts){ delete this->if_false_stmts_; this->if_false_stmts_ = else_stmts; }
-        virtual void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy1 = fields, fieldsCopy2, initCopy1 = init, initCopy2;
-            cond_->getVars(fieldsCopy1, initCopy1, table, inConstructor, failed);
-            if (fieldsCopy1.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy1, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl; 
-                }
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> varCopy1 = vars, varCopy2, fieldCopy1 = fields, fieldCopy2;
+            cond_->getVars(varCopy1, fields, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy1, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy1.size() != init.size()) {
-                for (auto var : difference(initCopy1, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl; 
-                }
+            for (auto fieldName : difference(fieldCopy1, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            fieldsCopy1 = fields;
-            initCopy1 = init;
+            fieldCopy1 = fields;
+            varCopy1 = vars;
             for (Statement *s : *if_true_stmts_) {
-                s->getVars(fieldsCopy1, initCopy1, table, inConstructor, failed);
+                s->getVars(varCopy1, fieldCopy1, varTable, fieldTable, inConstructor, failed);
             }
-            fieldsCopy2 = fields;
-            initCopy2 = init;
+            fieldCopy2 = fields;
+            varCopy2 = vars;
             for (Statement *s : *if_false_stmts_) {
-                s->getVars(fieldsCopy2, initCopy2, table, inConstructor, failed);
+                s->getVars(varCopy2, fieldCopy2, varTable, fieldTable, inConstructor, failed);
             }
-            fields = intersection(fieldsCopy1, fieldsCopy2);    
-            init = intersection(initCopy1, initCopy2);
+            fields = intersection(fieldCopy1, fieldCopy2);
+            vars = intersection(varCopy1, varCopy2);
         }
         virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
             ClassStruct *condType = cond_->getType(thisClass, thisMethod, failed);
@@ -258,25 +257,21 @@ namespace AST {
         std::vector<Statement*> *stmts_;
     public:
         While(RExpr *cond, std::vector<Statement*> *stmts): cond_(cond), stmts_(stmts) {}
-        virtual void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy1 = fields, initCopy1 = init;
-            cond_->getVars(fieldsCopy1, initCopy1, table, inConstructor, failed);
-            if (fieldsCopy1.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy1, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl; 
-                }
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
+            cond_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy1.size() != init.size()) {
-                for (auto var : difference(initCopy1, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl; 
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            fieldsCopy1 = fields;
-            initCopy1 = init;
+            fieldCopy = fields;
+            varCopy = vars;
             for (Statement *s : *stmts_) {
-                s->getVars(fieldsCopy1, initCopy1, table, inConstructor, failed);
+                s->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
             }           
         }
         virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
@@ -300,19 +295,17 @@ namespace AST {
         LExpr(RExpr *obj, std::string name): isField_(true), obj_(obj), name_(name) {}
         LExpr(std::string name): isField_(false), obj_(nullptr), name_(name) {}
         void json(std::ostream &out, unsigned int indent = 0);
-        virtual void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
             if (isField_) {
                 if (obj_->isThis()) {
                     if (std::find(fields.begin(), fields.end(), this->name_) == fields.end()) {
                         std::cerr << this->getPosition() << " Error: \"this." << this->name_ << "\" used before initialization" << std::endl;
                         failed = true;
                     }
-                } else {
-                    //Field of different class
                 }
             } else {
                 //Local variable
-                if (std::find(init.begin(), init.end(), this->name_) == init.end()) {
+                if (std::find(vars.begin(), vars.end(), this->name_) == vars.end()) {
                     std::cerr << this->getPosition() << " Error: \"" << this->name_ << "\" used before initialization" << std::endl;
                     failed = true;
                 }
@@ -352,7 +345,7 @@ namespace AST {
             return !isField_ && name_ == "this";
         }
         bool isAssignable() {
-            return (isField_ && obj_->isThis()) || (!isField_ && this->builtinIdents.find(name_) == this->builtinIdents.end());
+            return (isField_ && obj_->isThis()) || (!isField_ && this->builtinIdents.find(name_) == this->builtinIdents.end() && this->name_ != "this");
         }
         std::string const getName(){ return name_; }
 
@@ -370,56 +363,75 @@ namespace AST {
         Assignment(LExpr *l_expr, std::string type, RExpr *r_expr): l_expr_(l_expr), isTyped_(true), type_(type), r_expr_(r_expr) {} 
         Assignment(LExpr *l_expr, RExpr *r_expr): l_expr_(l_expr), isTyped_(false), type_(""), r_expr_(r_expr) {} 
         void json(std::ostream &out, unsigned int indent = 0);
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy = fields, initCopy = init;
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
             std::string fieldName, varName;
-            r_expr_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+            r_expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
             
             if (l_expr_->isField()) { // LExpr is of the form "[RExpr].[Ident]"
                 fieldName = l_expr_->getName();
-                if (l_expr_->isAssignable()) { //LExpr is of the form "this.[Ident]"
+                if (l_expr_->isAssignable()) {
                     if (std::find(fields.begin(), fields.end(), fieldName) == fields.end()) {
-                        if (inConstructor) { 
-                            fields.push_back(fieldName);
+                        fields.push_back(fieldName);
+                    }
+                    if (isTyped_) {
+                        if (this->classTable.find(this->type_) != this->classTable.end()) {
+                            if (fieldTable.find(fieldName) == fieldTable.end()) {
+                                fieldTable[fieldName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                            } else if (fieldTable[fieldName].second) {
+                                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" cannot have more than one explicit type definition" << std::endl;
+                                failed = true;
+                            } else {
+                                fieldTable[fieldName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                            }
                         } else {
-                            std::cerr << this->getPosition() << " Error: \"this." << fieldName << "\" used before initialization" << std::endl;
+                            std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" given unrecognized explicit type \"" << this->type_ << "\"" << std::endl;
                             failed = true;
+                        }
+                    } else {
+                        if (fieldTable.find(fieldName) == fieldTable.end()) {
+                            fieldTable[fieldName] = std::pair<ClassStruct*, bool>(nullptr, false);
                         }
                     }
                 } else {
-                    std::cerr << this->getPosition() << " Error: Cannot assign to field \"" << fieldName << "\" outside of method" << std::endl;
+                    std::cerr << this->getPosition() << " Error: Cannot assign to field \"" << fieldName << "\" outside of its class's methods" << std::endl;
                     failed = true;
                 }
             } else {
                 varName = l_expr_->getName();
                 if (l_expr_->isAssignable()) {
-                    if (std::find(init.begin(), init.end(), varName) == init.end()) {
-                        init.push_back(varName);
-                        if (isTyped_) {
-                            if (this->classTable.find(this->type_) != this->classTable.end()) {
-                                table[varName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
-                            } else {
-                                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" given unrecognized explicit type \"" << this->type_ << "\"" << std::endl;
+                    if (std::find(vars.begin(), vars.end(), varName) == vars.end()) {
+                        vars.push_back(varName);
+                    }
+                    if (isTyped_) {
+                        if (this->classTable.find(this->type_) != this->classTable.end()) {
+                            if (varTable.find(varName) == varTable.end()) {
+                                varTable[varName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                            } else if (varTable[varName].second) {
+                                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" cannot have more than one explicit type definition" << std::endl;
                                 failed = true;
+                            } else {
+                                varTable[varName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
                             }
-                            
+                        } else {
+                            std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" given unrecognized explicit type \"" << this->type_ << "\"" << std::endl;
+                            failed = true;
                         }
-                       
+                    } else {
+                        if (varTable.find(varName) == varTable.end()) {
+                            varTable[varName] = std::pair<ClassStruct*, bool>(nullptr, false);
+                        }
                     }
                 } else {
-                    std::cerr << this->getPosition() << " Error: Cannot assign to variable \"" << varName << "\"" << std::endl;
+                    std::cerr << this->getPosition() << " Error: Cannot assign to protected variable \"" << varName << "\"" << std::endl;
                     failed = true;
                 }
             }
@@ -491,23 +503,19 @@ namespace AST {
     public:
         Return(RExpr *r_expr): returnsNone_(false), r_expr_(r_expr) {}
         Return(): returnsNone_(true), r_expr_(nullptr) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy = fields, initCopy = init;
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
             if (inConstructor) {
                 std::cerr << this->getPosition() << " Error: Return statement not allowed in constructor" << std::endl;
                 failed = true;
             }
-            r_expr_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+            r_expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
         }
@@ -531,39 +539,35 @@ namespace AST {
         std::vector<TypeAlt*> *alternatives_;
     public:
         Typecase(RExpr *expr, std::vector<TypeAlt*> *alternatives): expr_(expr), alternatives_(alternatives) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy = fields, initCopy = init, retFields, retInit;
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars, retFields, retVars;
             bool firstCase = true;
-            expr_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+            expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
             for (TypeAlt *alt : *alternatives_) {
-                fieldsCopy = fields;
-                initCopy = init;
+                fieldCopy = fields;
+                varCopy = vars;
                 for (Statement *s : *alt->getStatements()) {
-                    s->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
+                    s->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
                 }
                 if (firstCase) {
                     firstCase = false;
-                    retFields = fieldsCopy;
-                    retInit = initCopy;
+                    retFields = fieldCopy;
+                    retVars = varCopy;
                 }else{
-                    retFields = intersection(fieldsCopy, retFields);
-                    retInit = intersection(initCopy, retInit);
+                    retFields = intersection(fieldCopy, retFields);
+                    retVars = intersection(varCopy, retVars);
                 }
             }
             fields = retFields;
-            init = retInit;
+            vars = retVars;
         }
         virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
             
@@ -575,7 +579,7 @@ namespace AST {
         unsigned int val_;
     public:
         IntLit(unsigned int val): val_(val) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {}
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) { }
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -583,7 +587,7 @@ namespace AST {
         std::string text_;
     public:
         StrLit(std::string text): text_(text) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {}
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) { }
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -593,19 +597,15 @@ namespace AST {
         std::vector<RExpr*> *args_;
     public:
         Call(RExpr *obj, std::string mthd, std::vector<RExpr*> *args): obj_(obj), mthd_(mthd), args_(args) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy = fields, initCopy = init;
-            obj_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
+            obj_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
             for (RExpr *arg : *args_) {
@@ -613,19 +613,15 @@ namespace AST {
                     std::cerr << this->getPosition() << " Error: Cannot pass 'this' as argument from constructor" << std::endl;
                     failed = true;
                 }
-                fieldsCopy = fields;
-                initCopy = init;
-                arg->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-                if (fieldsCopy.size() != fields.size()) {
-                    for (auto field : difference(fieldsCopy, fields)) {
-                        std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                    }
+                fieldCopy = fields;
+                varCopy = vars;
+                arg->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+                for (auto varName : difference(varCopy, vars)) {
+                    std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                     failed = true;
-                }  
-                if (initCopy.size() != init.size()) {
-                    for (auto var : difference(initCopy, init)) {
-                        std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                    }
+                }
+                for (auto fieldName : difference(fieldCopy, fields)) {
+                    std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                     failed = true;
                 }
             }
@@ -638,28 +634,24 @@ namespace AST {
         std::vector<RExpr*> *args_;
     public:
         Constructor(std::string name, std::vector<RExpr*> *args): name_(name), args_(args) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy, initCopy;
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy, varCopy;
             for (RExpr *arg : *args_) {
                 if (inConstructor && arg->isThis()) {
                     std::cerr << this->getPosition() << " Error: Cannot pass 'this' as argument from constructor" << std::endl;
                     failed = true;
                 }
-                fieldsCopy = fields;
-                initCopy = init;
-                arg->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-                if (fieldsCopy.size() != fields.size()) {
-                    for (auto field : difference(fieldsCopy, fields)) {
-                        std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                    }
+                fieldCopy = fields;
+                varCopy = vars;
+                arg->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+                for (auto varName : difference(varCopy, vars)) {
+                    std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                     failed = true;
                 }
-                if (initCopy.size() != init.size()) {
-                    for (auto var : difference(initCopy, init)) {
-                        std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                    }
+                for (auto fieldName : difference(fieldCopy, fields)) {
+                    std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                     failed = true;
-                } 
+                }
             }
         }
         void json(std::ostream &out, unsigned int indent = 0);
@@ -670,34 +662,26 @@ namespace AST {
         RExpr *rhs_;
     public:
         And(RExpr *lhs, RExpr *rhs): lhs_(lhs), rhs_(rhs) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy = fields, initCopy = init;
-            lhs_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
+            lhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            fieldsCopy = fields;
-            initCopy = init;
-            rhs_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+            fieldCopy = fields;
+            varCopy = vars;
+            rhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
         }
@@ -709,34 +693,26 @@ namespace AST {
         RExpr *rhs_;
     public:
         Or(RExpr *lhs, RExpr *rhs): lhs_(lhs), rhs_(rhs) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy = fields, initCopy = init;
-            lhs_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
+            lhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            fieldsCopy = fields;
-            initCopy = init;
-            rhs_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+            fieldCopy = fields;
+            varCopy = vars;
+            rhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
         }
@@ -747,19 +723,15 @@ namespace AST {
         RExpr *expr_;
     public:
         Not(RExpr *expr): expr_(expr) {}
-        void getVars(std::vector<std::string> &fields, std::vector<std::string> &init, std::map<std::string, std::pair<ClassStruct*, bool>> &table, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldsCopy = fields, initCopy = init;
-            expr_->getVars(fieldsCopy, initCopy, table, inConstructor, failed);
-            if (fieldsCopy.size() != fields.size()) {
-                for (auto field : difference(fieldsCopy, fields)) {
-                    std::cerr << this->getPosition() << " Error: \"this." << field << "\" used before initialization" << std::endl;
-                }
+        virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
+            expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
                 failed = true;
             }
-            if (initCopy.size() != init.size()) {
-                for (auto var : difference(initCopy, init)) {
-                    std::cerr << this->getPosition() << " Error: \"" << var << "\" used before initialization" << std::endl;
-                }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
         }

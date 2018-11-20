@@ -19,6 +19,31 @@ std::vector<T> intersection(std::vector<T> a, std::vector<T> b) {
     ret.resize(it-ret.begin());
     return ret;
 }
+template<class K, class V>
+std::pair<std::map<K, V>, std::map<K, std::pair<V, V>>> map_intersection(std::map<K, V> a, std::map<K, V> b) {
+    std::map<K, V> same;
+    std::map<K, std::pair<V, V>> diff;
+    for (auto kv : a) {
+        if (b.find(kv.first) != b.end()) {
+            if (kv.second == b[kv.first]) {
+                same[kv.first] = kv.second;
+            } else {
+                diff[kv.first] = std::pair<V, V>(kv.second, b[kv.first]);
+            }
+        }
+    }
+    return std::pair<std::map<K, V>, std::map<K, std::pair<V, V>>>(same, diff);
+}
+template<class K, class V>
+std::map<K, V> map_difference(std::map<K, V> a, std::map<K, V> b) {
+    std::map<K, V> diff;
+    for (auto kv : a) {
+        if (b.find(kv.first) == b.end()) {
+            diff[kv.first] = kv.second;
+        }
+    }
+    return diff;
+}
 
 namespace AST
 {
@@ -207,6 +232,7 @@ namespace AST
         this->addBuiltinIdent("false", Boolean);
         this->addBuiltinMethod(Obj, "STR", String, std::vector<ClassStruct*>());
         this->addBuiltinMethod(Obj, "PRINT", Nothing, std::vector<ClassStruct*>());
+        this->addBuiltinMethod(Obj, "EQUALS", Boolean, std::vector<ClassStruct*>(1, Obj));
         this->addBuiltinMethod(String, "PLUS", String, std::vector<ClassStruct*>(1, String));
         this->addBuiltinMethod(Int, "PLUS", Int, std::vector<ClassStruct*>(1, Int));
     }
@@ -315,24 +341,84 @@ namespace AST
             std::cout << "Class " << cs->name << std::endl;
             std::cout << "    Fields:" << std::endl;
             for (auto f : cs->fieldTable) { 
-                std::cout << "        this." << f.first << std::endl;
+                std::cout << "        this." << f.first;
+                if (f.second.second) {
+                    std::cout << "\t* " << f.second.first->name;
+                }
+                std::cout << std::endl;
             }
             std::cout << "    Constructor Locals:" << std::endl;
             for (auto v : cs->constructor->symbolTable) { 
-                std::cout << "        " << v.first << std::endl;
+                std::cout << "        " << v.first;
+                if (v.second.second) {
+                    std::cout << "\t* " << v.second.first->name;
+                }
+                std::cout << std::endl;
             }
             for (auto m : cs->methodTable) {
                 MethodStruct *ms = m.second;
                 std::cout << "    " << ms->name << "() Locals:" << std::endl;
                 for (auto v : ms->symbolTable) { 
-                    std::cout << "        " << v.first << std::endl;
+                    std::cout << "        " << v.first;
+                    if (v.second.second) {
+                        std::cout << "\t* " << v.second.first->name;
+                    }
+                    std::cout << std::endl;
                 }
             }
         }
         std::cout << "Program Body Locals:" << std::endl;
         for (auto v : this->body_->symbolTable) { 
-            std::cout << "    " << v.first << std::endl;
+            std::cout << "    " << v.first;
+            if (v.second.second) {
+                std::cout << "\t* " << v.second.first->name;
+            }
+            std::cout << std::endl;
+        } 
+        std::cout << "------------Inferring Types-------------" << std::endl;
+        inferTypes(failed);
+        if (failed) {
+            return true;
         }
+        for (auto c : this->classTable) {
+            ClassStruct *cs = c.second;
+            std::cout << "Class " << cs->name << std::endl;
+            std::cout << "    Fields:" << std::endl;
+            for (auto f : cs->fieldTable) { 
+                std::cout << "        this." << f.first;
+                if (f.second.first != nullptr) {
+                    std::cout << "\t* " << f.second.first->name;
+                }
+                std::cout << std::endl;
+            }
+            std::cout << "    Constructor Locals:" << std::endl;
+            for (auto v : cs->constructor->symbolTable) { 
+                std::cout << "        " << v.first;
+                if (v.second.first != nullptr) {
+                    std::cout << "\t* " << v.second.first->name;
+                }
+                std::cout << std::endl;
+            }
+            for (auto m : cs->methodTable) {
+                MethodStruct *ms = m.second;
+                std::cout << "    " << ms->name << "() Locals:" << std::endl;
+                for (auto v : ms->symbolTable) { 
+                    std::cout << "        " << v.first;
+                    if (v.second.first != nullptr) {
+                        std::cout << "\t* " << v.second.first->name;
+                    }
+                    std::cout << std::endl;
+                }
+            }
+        }
+        std::cout << "Program Body Locals:" << std::endl;
+        for (auto v : this->body_->symbolTable) { 
+            std::cout << "    " << v.first;
+            if (v.second.first != nullptr) {
+                std::cout << "\t* " << v.second.first->name;
+            }
+            std::cout << std::endl;
+        } 
         return failed;
     }
     void Program::buildClassMap(bool &failed) {
@@ -553,46 +639,48 @@ namespace AST
         }
     }
     void Program::getVars(bool &failed) {
-        std::vector<std::string> fields, fieldsCopy, init;
-        std::map<std::string, ClassStruct*> table;
+        std::vector<std::string> fields, fieldCopy, vars;
+        std::map<std::string, std::pair<ClassStruct*, bool>> fieldTable;
         MethodStruct *ms;
         for (Class *c : *this->classes_) {
             for (auto sym_key_value : c->getClassStruct()->constructor->symbolTable) {
-                init.push_back(sym_key_value.first);
+                vars.push_back(sym_key_value.first);
             }
             for (Statement *s : *c->getStatements()) {
-                s->getVars(fields, init, c->getClassStruct()->constructor->symbolTable, true, failed);
+                s->getVars(vars, fields, c->getClassStruct()->constructor->symbolTable, fieldTable, true, failed);
             }
             for (std::string field : fields) {
-                c->getClassStruct()->fieldTable[field] = std::pair<ClassStruct*, bool>(nullptr, false);
+                c->getClassStruct()->fieldTable[field] = fieldTable[field];
             }
-            init.clear();
+            vars.clear();
+            fieldTable.clear();
             for (Method *m : *c->getMethods()) {
                 ms = m->getMethodStruct();
                 for (auto sym_key_value : ms->symbolTable) {
-                    init.push_back(sym_key_value.first);
+                    vars.push_back(sym_key_value.first);
                 }
-                
                 for (Statement *s : *m->getStatements()) {
-                    fieldsCopy = fields;
-                    s->getVars(fieldsCopy, init, ms->symbolTable, false, failed);
+                    fieldCopy = fields;
+                    s->getVars(vars, fieldCopy, ms->symbolTable, fieldTable, false, failed);
                 }
-                init.clear();
+                vars.clear();
+                fieldTable.clear();
             }
             fields.clear();
         }
         for (auto sym_key_value : this->body_->symbolTable) {
-            init.push_back(sym_key_value.first);
+            vars.push_back(sym_key_value.first);
         }
         for (Statement *s : *this->stmts_) {
-            s->getVars(fields, init, this->body_->symbolTable, false, failed);
+            s->getVars(vars, fields, this->body_->symbolTable, fieldTable, false, failed);
         }
     }
     void Program::inferTypes(bool &failed) {
-        bool changed = false;
+        bool changed;
         ClassStruct *cs;
         MethodStruct *ms;
         do{
+            changed = false;
             for (Class *c : *this->classes_) {
                 cs = c->getClassStruct();
                 for (Statement *s : *c->getStatements()) {
@@ -609,6 +697,6 @@ namespace AST
             for (Statement *s : *this->stmts_) {
                 s->updateTypes(nullptr, this->body_, changed, failed);
             }
-        }while(changed);
+        }while(changed && !failed);
     }
 }
