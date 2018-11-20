@@ -169,8 +169,8 @@ else: ELSE '{' opt_statements '}' { $$ = $3; }
 opt_actuals: '(' actuals ')' { $$ = new std::vector<AST::RExpr*>(); $$ = $2; }
            | '(' ')'         { $$ = new std::vector<AST::RExpr*>(); }
 
-actuals: r_expr         { $$ = new std::vector<AST::RExpr*>(); $$->push_back($1); }
-       | actuals ',' r_expr { $$ = new std::vector<AST::RExpr*>();  }
+actuals: r_expr             { $$ = new std::vector<AST::RExpr*>(); $$->push_back($1); }
+       | actuals ',' r_expr { $$ = $1; $$->push_back($3);  }
 
 r_expr: STRING_LIT             { $$ = new AST::StrLit($1); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
       | INT_LIT                { $$ = new AST::IntLit($1); $$->set_position(@$.begin.line, @$.begin.column, @$.end.line, @$.end.column, @$.begin.filename); }
