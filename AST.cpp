@@ -227,14 +227,19 @@ namespace AST
         ClassStruct *Int     = this->addBuiltinType("Int", Obj);
         ClassStruct *String  = this->addBuiltinType("String", Obj);
         ClassStruct *Boolean = this->addBuiltinType("Boolean", Obj);
-        this->addBuiltinIdent("none", Nothing);
-        this->addBuiltinIdent("true", Boolean);
+        this->addBuiltinIdent("none",  Nothing);
+        this->addBuiltinIdent("true",  Boolean);
         this->addBuiltinIdent("false", Boolean);
-        this->addBuiltinMethod(Obj, "STR", String, std::vector<ClassStruct*>());
-        this->addBuiltinMethod(Obj, "PRINT", Nothing, std::vector<ClassStruct*>());
-        this->addBuiltinMethod(Obj, "EQUALS", Boolean, std::vector<ClassStruct*>(1, Obj));
-        this->addBuiltinMethod(String, "PLUS", String, std::vector<ClassStruct*>(1, String));
-        this->addBuiltinMethod(Int, "PLUS", Int, std::vector<ClassStruct*>(1, Int));
+        //                     Type    Method    Returns  Arguments
+        this->addBuiltinMethod(Obj,    "STR",    String,  std::vector<ClassStruct*>());
+        this->addBuiltinMethod(Obj,    "PRINT",  Nothing, std::vector<ClassStruct*>());
+        this->addBuiltinMethod(Obj,    "EQUALS", Boolean, std::vector<ClassStruct*>(1, Obj));
+        this->addBuiltinMethod(String, "PLUS",   String,  std::vector<ClassStruct*>(1, String));
+        this->addBuiltinMethod(Int,    "PLUS",   Int,     std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int,    "MINUS",  Int,     std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int,    "NEGATE", Int,     std::vector<ClassStruct*>());
+        this->addBuiltinMethod(Int,    "TIMES",  Int,     std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int,    "DIVIDE", Int,     std::vector<ClassStruct*>(1, Int));
     }
     
     bool Program::typeCheck() {
@@ -338,42 +343,52 @@ namespace AST
         }
         for (auto c : this->classTable) {
             ClassStruct *cs = c.second;
-            std::cout << "Class " << cs->name << std::endl;
-            std::cout << "    Fields:" << std::endl;
-            for (auto f : cs->fieldTable) { 
-                std::cout << "        this." << f.first;
-                if (f.second.second) {
-                    std::cout << "\t* " << f.second.first->name;
-                }
-                std::cout << std::endl;
-            }
-            std::cout << "    Constructor Locals:" << std::endl;
-            for (auto v : cs->constructor->symbolTable) { 
-                std::cout << "        " << v.first;
-                if (v.second.second) {
-                    std::cout << "\t* " << v.second.first->name;
-                }
-                std::cout << std::endl;
-            }
-            for (auto m : cs->methodTable) {
-                MethodStruct *ms = m.second;
-                std::cout << "    " << ms->name << "() Locals:" << std::endl;
-                for (auto v : ms->symbolTable) { 
-                    std::cout << "        " << v.first;
-                    if (v.second.second) {
-                        std::cout << "\t* " << v.second.first->name;
+            if (this->builtinTypes.find(cs->name) == this->builtinTypes.end()) {
+                std::cout << "Class " << cs->name << std::endl;
+                std::cout << "    Fields:" << std::endl;
+                for (auto v : cs->fieldTable) { 
+                    if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                        std::cout << "        this." << v.first;
+                        if (v.second.second) {
+                            std::cout << "\t* " << v.second.first->name;
+                        }
+                        std::cout << std::endl;
                     }
-                    std::cout << std::endl;
+                }
+                std::cout << "    Constructor Locals:" << std::endl;
+                for (auto v : cs->constructor->symbolTable) { 
+                    if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                        std::cout << "        " << v.first;
+                        if (v.second.second) {
+                            std::cout << "\t* " << v.second.first->name;
+                        }
+                        std::cout << std::endl;
+                    }
+                }
+                for (auto m : cs->methodTable) {
+                    MethodStruct *ms = m.second;
+                    std::cout << "    " << ms->name << "() Locals:" << std::endl;
+                    for (auto v : ms->symbolTable) { 
+                        if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                            std::cout << "        " << v.first;
+                            if (v.second.second) {
+                                std::cout << "\t* " << v.second.first->name;
+                            }
+                            std::cout << std::endl;
+                        }
+                    }
                 }
             }
         }
         std::cout << "Program Body Locals:" << std::endl;
         for (auto v : this->body_->symbolTable) { 
-            std::cout << "    " << v.first;
-            if (v.second.second) {
-                std::cout << "\t* " << v.second.first->name;
+            if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                std::cout << "   " << v.first;
+                if (v.second.second) {
+                    std::cout << "\t* " << v.second.first->name;
+                }
+                std::cout << std::endl;
             }
-            std::cout << std::endl;
         } 
         std::cout << "------------Inferring Types-------------" << std::endl;
         inferTypes(failed);
@@ -382,42 +397,68 @@ namespace AST
         }
         for (auto c : this->classTable) {
             ClassStruct *cs = c.second;
-            std::cout << "Class " << cs->name << std::endl;
-            std::cout << "    Fields:" << std::endl;
-            for (auto f : cs->fieldTable) { 
-                std::cout << "        this." << f.first;
-                if (f.second.first != nullptr) {
-                    std::cout << "\t* " << f.second.first->name;
-                }
-                std::cout << std::endl;
-            }
-            std::cout << "    Constructor Locals:" << std::endl;
-            for (auto v : cs->constructor->symbolTable) { 
-                std::cout << "        " << v.first;
-                if (v.second.first != nullptr) {
-                    std::cout << "\t* " << v.second.first->name;
-                }
-                std::cout << std::endl;
-            }
-            for (auto m : cs->methodTable) {
-                MethodStruct *ms = m.second;
-                std::cout << "    " << ms->name << "() Locals:" << std::endl;
-                for (auto v : ms->symbolTable) { 
-                    std::cout << "        " << v.first;
-                    if (v.second.first != nullptr) {
-                        std::cout << "\t* " << v.second.first->name;
+            if (this->builtinTypes.find(cs->name) == this->builtinTypes.end()) {
+                std::cout << "Class " << cs->name << std::endl;
+                std::cout << "    Fields:" << std::endl;
+                for (auto v : cs->fieldTable) { 
+                    if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                        std::cout << "        this." << v.first;
+                        if (v.second.first != nullptr) {
+                            if (v.second.second)
+                                std::cout << "\t* ";
+                            else
+                                std::cout << "\t  ";
+                            std::cout << v.second.first->name;
+                        }
+                        std::cout << std::endl;
                     }
-                    std::cout << std::endl;
+                }
+                std::cout << "    Constructor Locals:" << std::endl;
+                for (auto v : cs->constructor->symbolTable) { 
+                    if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                        std::cout << "        " << v.first;
+                        if (v.second.first != nullptr) {
+                            if (v.second.second)
+                                std::cout << "\t* ";
+                            else
+                                std::cout << "\t  ";
+                            std::cout << v.second.first->name;
+                        }
+                        std::cout << std::endl;
+                    }
+                }
+                for (auto m : cs->methodTable) {
+                    MethodStruct *ms = m.second;
+                    std::cout << "    " << ms->name << "() Locals:" << std::endl;
+                    for (auto v : ms->symbolTable) { 
+                        if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                            std::cout << "        " << v.first;
+                            if (v.second.first != nullptr) {
+                                if (v.second.second)
+                                    std::cout << "\t* ";
+                                else
+                                    std::cout << "\t  ";
+                                std::cout << v.second.first->name;
+                            }
+                            std::cout << std::endl;
+                        }
+                    }
                 }
             }
         }
         std::cout << "Program Body Locals:" << std::endl;
         for (auto v : this->body_->symbolTable) { 
-            std::cout << "    " << v.first;
-            if (v.second.first != nullptr) {
-                std::cout << "\t* " << v.second.first->name;
+            if (this->builtinIdents.find(v.first) == this->builtinIdents.end()) {
+                std::cout << "    " << v.first;
+                if (v.second.first != nullptr) {
+                    if (v.second.second)
+                        std::cout << "\t* ";
+                    else
+                        std::cout << "\t  ";
+                    std::cout << v.second.first->name;
+                }
+                std::cout << std::endl;
             }
-            std::cout << std::endl;
         } 
         return failed;
     }
@@ -443,7 +484,8 @@ namespace AST
             if (classTable.find(super) == classTable.end()) {
                 std::cerr << c->getPosition() << " Error: Class \"" << name << "\" extends unrecognized type \"" << super << "\"" << std::endl;
                 failed = true;
-            } else if (this->builtinTypes.find(name) != this->builtinTypes.end()) {
+            } else if (this->builtinTypes.find(super) != this->builtinTypes.end() && 
+                       super != "Obj") {
                 std::cerr << c->getPosition() << " Error: Class \"" << name << "\" cannot derive from builtin type \"" << super << "\"" << std::endl;
                 failed = true;
             } else {
@@ -506,28 +548,29 @@ namespace AST
         }
     }
     void Program::buildLCAs(bool &failed) {
-         for (auto it : this->classTable) {
-            ClassStruct *first = it.second;
-            first->LCA[first] = first;
-            ClassStruct *curr = first;
-            while (curr->super != nullptr) {
-                for (auto currLCAs : curr->super->LCA) {
-                    if (first->LCA.find(currLCAs.first) == first->LCA.end()) {
-                        first->LCA[currLCAs.first] = currLCAs.second;
-                        currLCAs.first->LCA[first] = currLCAs.second;
-                    }
-                }
-                curr->LCA[curr->super] = curr->super;
-                curr->super->LCA[curr] = curr->super;
+        std::map<ClassStruct*, std::vector<ClassStruct*>> paths;
+        ClassStruct *curr;
+        for (auto it : this->classTable) {
+            curr = it.second;
+            while (curr != nullptr) {
+                paths[it.second].push_back(curr);
                 curr = curr->super;
             }
         }
-        size_t classCount = this->classTable.size();
-        for (auto it: this->classTable) {
-            ClassStruct *cs = it.second;
-            if (cs->LCA.size() != classCount) {
-                std::cerr << "Unable to complete LCA table for class \"" << cs->name << "\" " << std::endl;
-                failed = true;
+        for (auto it1 = paths.begin(); it1 != paths.end(); it1++) {
+            for (auto it2 = it1; it2 != paths.end(); it2++) {
+                auto curr1 = it1->second.rbegin();
+                auto curr2 = it2->second.rbegin();
+                auto prev = curr1;
+                while (*curr1 == *curr2 && 
+                        curr1 != it1->second.rend() && 
+                        curr2 != it2->second.rend()) {
+                    prev = curr1;
+                    curr1++;
+                    curr2++;
+                }
+                it1->first->LCA[it2->first] = *prev;
+                it2->first->LCA[it1->first] = *prev;
             }
         }
     }
@@ -642,20 +685,24 @@ namespace AST
         std::vector<std::string> fields, fieldCopy, vars;
         std::map<std::string, std::pair<ClassStruct*, bool>> fieldTable;
         MethodStruct *ms;
+        ClassStruct *cs;
         for (Class *c : *this->classes_) {
-            for (auto sym_key_value : c->getClassStruct()->constructor->symbolTable) {
+            cs = c->getClassStruct();
+            cs->constructor->symbolTable["this"] = std::pair<ClassStruct*, bool>(cs, true);
+            for (auto sym_key_value : cs->constructor->symbolTable) {
                 vars.push_back(sym_key_value.first);
             }
             for (Statement *s : *c->getStatements()) {
-                s->getVars(vars, fields, c->getClassStruct()->constructor->symbolTable, fieldTable, true, failed);
+                s->getVars(vars, fields, cs->constructor->symbolTable, fieldTable, true, failed);
             }
             for (std::string field : fields) {
-                c->getClassStruct()->fieldTable[field] = fieldTable[field];
+                cs->fieldTable[field] = fieldTable[field];
             }
             vars.clear();
             fieldTable.clear();
             for (Method *m : *c->getMethods()) {
                 ms = m->getMethodStruct();
+                ms->symbolTable["this"] = std::pair<ClassStruct*, bool>(cs, true);
                 for (auto sym_key_value : ms->symbolTable) {
                     vars.push_back(sym_key_value.first);
                 }
@@ -679,7 +726,9 @@ namespace AST
         bool changed;
         ClassStruct *cs;
         MethodStruct *ms;
-        do{
+        int pass = 1;
+        do {
+            std::cout << "Pass " << pass++ << std::endl;
             changed = false;
             for (Class *c : *this->classes_) {
                 cs = c->getClassStruct();
@@ -691,12 +740,11 @@ namespace AST
                     for (Statement *s : *m->getStatements()) {
                         s->updateTypes(cs, ms, changed, failed);
                     }
-                            
                 }
             }
             for (Statement *s : *this->stmts_) {
                 s->updateTypes(nullptr, this->body_, changed, failed);
             }
-        }while(changed && !failed);
+        } while (changed && !failed);
     }
 }

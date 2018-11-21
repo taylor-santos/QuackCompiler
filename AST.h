@@ -104,7 +104,7 @@ namespace AST {
     class Statement : public ASTNode {
     public:
         virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) = 0;
-        virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {}
+        virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) = 0;
     };
     
     class Method : public ASTNode {
@@ -201,7 +201,10 @@ namespace AST {
     class RExpr : public Statement {
     public:
         virtual bool isThis() { return false; }
-        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) { return nullptr; }
+        void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+            this->getType(thisClass, thisMethod, failed);
+        }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) = 0;
     };   
     
     class If : public Statement {
@@ -294,7 +297,19 @@ namespace AST {
     public:
         LExpr(RExpr *obj, std::string name): isField_(true), obj_(obj), name_(name) {}
         LExpr(std::string name): isField_(false), obj_(nullptr), name_(name) {}
-        void json(std::ostream &out, unsigned int indent = 0);
+        bool isField() {
+            return isField_;
+        }
+        bool isThis() {
+            return !isField_ && name_ == "this";
+        }
+        bool isAssignable() {
+            return (isField_ && obj_->isThis()) || (!isField_ && this->builtinIdents.find(name_) == this->builtinIdents.end() && this->name_ != "this");
+        }
+        std::string const getName(){ return name_; }
+        std::string getName() const {
+            return name_;
+        }
         virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
             if (isField_) {
                 if (obj_->isThis()) {
@@ -312,46 +327,27 @@ namespace AST {
             }
         }
         virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            ClassStruct *objType;
             if (isField_) {
-                if (isThis()) {
-                    if (thisClass) {
-                        return thisClass;
+                objType = obj_->getType(thisClass, thisMethod, failed);
+                if (objType != nullptr) {
+                    if (objType->fieldTable.find(this->name_) != objType->fieldTable.end()) {
+                        return objType->fieldTable[this->name_].first;
                     } else {
-                        std::cerr << this->getPosition() << " Error: Cannot use 'this' identifier in program body" << std::endl;
-                        return nullptr;
-                    }
-                } else {
-                    ClassStruct *objType = obj_->getType(thisClass, thisMethod, failed);
-                    if (objType) {
-                        if (objType->fieldTable.find(name_) != objType->fieldTable.end()) {
-                            return objType->fieldTable[name_].first;
-                        } else {
-                            std::cerr << this->getPosition() << " Error: Object of type \"" << objType->name << "\" does not contain the field \"" << name_ << "\"" << std::endl;
-                            failed = true;
-                            return nullptr;
-                        }
-                    } else {
-                        return nullptr;
+                        std::cerr << this->getPosition() << " Error: \"" << this->name_ << "\" is not a field of class \"" << objType->name << "\"" << std::endl;
+                        failed = true;
                     }
                 }
+            } else if (this->name_ == "this") { 
+                return thisClass;
+            } else if (this->builtinIdents.find(this->name_) != this->builtinIdents.end()) {
+                return this->builtinIdents[this->name_];
             } else {
-                return thisMethod->symbolTable[name_].first;
+                return thisMethod->symbolTable[this->name_].first;
             }
+            return nullptr;
         }
-        bool isField() {
-            return isField_;
-        }
-        bool isThis() {
-            return !isField_ && name_ == "this";
-        }
-        bool isAssignable() {
-            return (isField_ && obj_->isThis()) || (!isField_ && this->builtinIdents.find(name_) == this->builtinIdents.end() && this->name_ != "this");
-        }
-        std::string const getName(){ return name_; }
-
-        std::string getName() const {
-            return name_;
-        }
+        void json(std::ostream &out, unsigned int indent = 0);
     };
     
     class Assignment : public Statement {
@@ -519,6 +515,11 @@ namespace AST {
                 failed = true;
             }
         }
+        virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+            if (!returnsNone_) {
+                r_expr_->updateTypes(thisClass, thisMethod, changed, failed);
+            }
+        }
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -528,6 +529,8 @@ namespace AST {
         std::vector<Statement*> *stmts_;
     public:
         TypeAlt(std::string name, std::string type, std::vector<Statement*> *stmts): name_(name), type_(type), stmts_(stmts) {}
+        std::string getName() const { return name_; }
+        std::string getType() const { return type_; }
         std::vector<Statement*>* getStatements() const {
             return stmts_;
         }
@@ -540,8 +543,8 @@ namespace AST {
     public:
         Typecase(RExpr *expr, std::vector<TypeAlt*> *alternatives): expr_(expr), alternatives_(alternatives) {}
         virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
-            std::vector<std::string> fieldCopy = fields, varCopy = vars, retFields, retVars;
-            bool firstCase = true;
+            std::vector<std::string> fieldCopy = fields, varCopy = vars;
+            std::string altName, altType;
             expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
             for (auto varName : difference(varCopy, vars)) {
                 std::cerr << this->getPosition() << " Error: Variable \"" << varName << "\" used before initialization" << std::endl;
@@ -552,25 +555,33 @@ namespace AST {
                 failed = true;
             }
             for (TypeAlt *alt : *alternatives_) {
-                fieldCopy = fields;
-                varCopy = vars;
-                for (Statement *s : *alt->getStatements()) {
-                    s->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
-                }
-                if (firstCase) {
-                    firstCase = false;
-                    retFields = fieldCopy;
-                    retVars = varCopy;
-                }else{
-                    retFields = intersection(fieldCopy, retFields);
-                    retVars = intersection(varCopy, retVars);
+                altName = alt->getName();
+                if (varTable.find(altName) != varTable.end()) {
+                    std::cerr << this->getPosition() << " Error: Typecase cannot introduce the variable \"" << altName << "\" because it already exists in this scope" << std::endl;
+                    failed = true;
+                } else {
+                    fieldCopy = fields;
+                    varCopy = vars;
+                    altType = alt->getType();
+                    if (this->classTable.find(altType) == this->classTable.end()) {
+                        std::cerr << this->getPosition() << " Error: Typecase cannot introduce variable of unrecognized type \"" << altType << "\"" << std::endl;
+                        failed = true;
+                    } else {
+                        varTable[altName] = std::pair<ClassStruct*, bool>(this->classTable[altType], true);
+                        for (Statement *s : *alt->getStatements()) {
+                            s->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+                        }
+                    }
                 }
             }
-            fields = retFields;
-            vars = retVars;
         }
         virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
-            
+            expr_->updateTypes(thisClass, thisMethod, changed, failed);
+            for (TypeAlt *alt : *alternatives_) {
+                for (Statement *s : *alt->getStatements()) {
+                    s->updateTypes(thisClass, thisMethod, changed, failed);
+                }
+            }
         }
         void json(std::ostream &out, unsigned int indent = 0);
     };
@@ -580,6 +591,9 @@ namespace AST {
     public:
         IntLit(unsigned int val): val_(val) {}
         virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) { }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            return this->builtinTypes["Int"];
+        }
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -588,6 +602,9 @@ namespace AST {
     public:
         StrLit(std::string text): text_(text) {}
         virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) { }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            return this->builtinTypes["String"];
+        }
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -626,6 +643,45 @@ namespace AST {
                 }
             }
         }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            std::vector<ClassStruct*> argTypes;
+            size_t i;
+            ClassStruct *actualArgType, *LCAType, *objType;
+            bool allArgs = true;
+            objType = obj_->getType(thisClass, thisMethod, failed);
+            if (objType != nullptr) {
+                if (objType->methodTable.find(mthd_) == objType->methodTable.end()) {
+                    std::cerr << this->getPosition() << " Error: \"" << mthd_ << "()\" is not a method of class \"" << objType->name << "\"" << std::endl;
+                    failed = true;
+                }else{
+                    argTypes = objType->methodTable[mthd_]->argTypes;
+                    if (args_->size() != argTypes.size()) {
+                        std::cerr << this->getPosition() << " Error: Method \"" << mthd_ << "()\" of class \"" << objType->name << "\" takes " << argTypes.size() << " arguments, not " << args_->size() << std::endl;
+                        failed = true;
+                    } else {
+                        for (i=0; i<args_->size(); i++) {
+                            actualArgType = (*args_)[i]->getType(thisClass, thisMethod, failed);
+                            if (actualArgType != nullptr) {
+                                LCAType = actualArgType->LCA[argTypes[i]];
+                                if (LCAType != argTypes[i]) {
+                                    std::cerr << this->getPosition() << " Error: Argument " << i+1 << " of method \"" << this->mthd_ << "()\" of class \"" << objType->name 
+                                            << "\" has type \"" << actualArgType->name 
+                                            << "\" which is not a subtype of the required type \"" << argTypes[i]->name << "\"" << std::endl;
+                                    failed = true;
+                                    allArgs = false;
+                                }
+                            } else {
+                                allArgs = false;
+                            }
+                        }
+                        if (allArgs) {
+                            return objType->methodTable[mthd_]->type;
+                        }
+                    }   
+                }
+            }
+            return nullptr;
+        }            
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -636,6 +692,10 @@ namespace AST {
         Constructor(std::string name, std::vector<RExpr*> *args): name_(name), args_(args) {}
         virtual void getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
             std::vector<std::string> fieldCopy, varCopy;
+            if (this->classTable.find(name_) == this->classTable.end()) {
+                std::cerr << this->getPosition() << " Error: \"" << this->name_ << " \" constructor is for an unrecognized class" << std::endl;
+                failed = true;
+            }
             for (RExpr *arg : *args_) {
                 if (inConstructor && arg->isThis()) {
                     std::cerr << this->getPosition() << " Error: Cannot pass 'this' as argument from constructor" << std::endl;
@@ -653,6 +713,29 @@ namespace AST {
                     failed = true;
                 }
             }
+        }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            std::vector<ClassStruct*> argTypes = this->classTable[name_]->constructor->argTypes;
+            size_t i;
+            ClassStruct *actualArgType, *LCAType;
+            if (args_->size() != argTypes.size()) {
+                std::cerr << this->getPosition() << " Error: Constructor for class \"" << name_ << "\" takes " << argTypes.size() << " arguments, not " << args_->size() << std::endl;
+                failed = true;
+            } else {
+                for (i=0; i<args_->size(); i++) {
+                    actualArgType = (*args_)[i]->getType(thisClass, thisMethod, failed);
+                    if (actualArgType != nullptr) {
+                        LCAType = actualArgType->LCA[argTypes[i]];
+                        if (LCAType != argTypes[i]) {
+                            std::cerr << this->getPosition() << " Error: Argument " << i+1 << " of \"" << this->name_ 
+                                    << "\" constructor call has type \"" << actualArgType->name 
+                                    << "\" which is not a subtype of the required type \"" << argTypes[i]->name << "\"" << std::endl;
+                            failed = true;
+                        }
+                    }
+                }
+            }
+            return this->classTable[this->name_];
         }
         void json(std::ostream &out, unsigned int indent = 0);
     };
@@ -685,6 +768,20 @@ namespace AST {
                 failed = true;
             }
         }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            ClassStruct *exprType;
+            exprType = lhs_->getType(thisClass, thisMethod, failed);
+            if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+                std::cerr << this->getPosition() << " Error: Left-hand expression of 'and' is not a Boolean" << std::endl;
+                failed = true;
+            }
+            exprType = rhs_->getType(thisClass, thisMethod, failed);
+            if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+                std::cerr << this->getPosition() << " Error: Right-hand expression of 'and' is not a Boolean" << std::endl;
+                failed = true;
+            }
+            return this->builtinTypes["Boolean"];
+        }
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -716,6 +813,20 @@ namespace AST {
                 failed = true;
             }
         }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            ClassStruct *exprType;
+            exprType = lhs_->getType(thisClass, thisMethod, failed);
+            if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+                std::cerr << this->getPosition() << " Error: Left-hand expression of 'or' is not a Boolean" << std::endl;
+                failed = true;
+            }
+            exprType = rhs_->getType(thisClass, thisMethod, failed);
+            if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+                std::cerr << this->getPosition() << " Error: Right-hand expression of 'or' is not a Boolean" << std::endl;
+                failed = true;
+            }
+            return this->builtinTypes["Boolean"];
+        }
         void json(std::ostream &out, unsigned int indent = 0);
     };
 
@@ -734,6 +845,15 @@ namespace AST {
                 std::cerr << this->getPosition() << " Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
                 failed = true;
             }
+        }
+        virtual ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+            ClassStruct *exprType;
+            exprType = expr_->getType(thisClass, thisMethod, failed);
+            if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+                std::cerr << this->getPosition() << " Error: Expression right of 'not' is not a Boolean" << std::endl;
+                failed = true;
+            }
+            return this->builtinTypes["Boolean"];
         }
         void json(std::ostream &out, unsigned int indent = 0);
     };
