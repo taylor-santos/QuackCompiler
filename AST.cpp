@@ -47,15 +47,27 @@ std::map<K, V> map_difference(std::map<K, V> a, std::map<K, V> b) {
 
 namespace AST
 {
+/* ASTNode */
     std::map<std::string, ClassStruct*> ASTNode::classTable;
     std::map<std::string, ClassStruct*> ASTNode::builtinTypes;
     std::map<std::string, ClassStruct*> ASTNode::builtinIdents;
+    std::string ASTNode::getPosition() const { 
+        return std::to_string(first_line) + ":" + std::to_string(first_col) + ": "; 
+    }
+    void ASTNode::set_position(int first_line, int first_col, int last_line, int last_col, std::string *filename){
+        this->first_line = first_line;
+        this->first_col = first_col;
+        this->last_line = last_line;
+        this->last_col = last_col;
+        if (filename)
+            this->filename = *filename;
+    }
     void ASTNode::json_indent(std::ostream& out, unsigned int indent){
         for (unsigned int i=0; i<indent; i++){
                 out << "  ";
         }
     }
-    void ASTNode::json_head(std::ostream& out, unsigned int &indent, std::string node_kind){
+    void ASTNode::json_head(std::ostream& out, unsigned int &indent, std::string const &node_kind){
         out << "{" << std::endl;
         indent++;
         this->json_indent(out, indent);
@@ -67,25 +79,25 @@ namespace AST
         this->json_indent(out, indent);
         out << "}";
     }
-    void ASTNode::json_child(std::ostream& out, unsigned int indent, std::string field, ASTNode *child){
+    void ASTNode::json_child(std::ostream& out, unsigned int indent, std::string const &field, ASTNode *child){
         out << "," << std::endl;
         this->json_indent(out, indent);
         out << "\"" << field << "\": ";
         child->json(out, indent);
     }
     
-    void ASTNode::json_string(std::ostream& out, unsigned int indent, std::string field, std::string str){
+    void ASTNode::json_string(std::ostream& out, unsigned int indent, std::string const &field, std::string const &str){
         out << "," << std::endl;
         this->json_indent(out, indent);
         out << "\"" << field << "\": \"" << str << "\"";
     }
-    void ASTNode::json_int(std::ostream& out, unsigned int indent, std::string field, unsigned int val){
+    void ASTNode::json_int(std::ostream& out, unsigned int indent, std::string const &field, unsigned int val){
         out << "," << std::endl;
         this->json_indent(out, indent);
         out << "\"" << field << "\": " << val;
     }
     template<class NodeType>
-    void ASTNode::json_list(std::ostream& out, unsigned int indent, std::string field, std::vector<NodeType> const& list){
+    void ASTNode::json_list(std::ostream& out, unsigned int indent, std::string const &field, std::vector<NodeType> const& list){
         out << "," << std::endl;
         this->json_indent(out, indent);
         out << "\"" << field << "\": [";
@@ -102,12 +114,33 @@ namespace AST
         }
         out << "]";
     }
+    ClassStruct *ASTNode::addBuiltinType(std::string name, ClassStruct* super) {
+        ClassStruct *cs = new ClassStruct({name, super});
+        if (super)
+            super->children.push_back(cs);
+        cs->constructor = new MethodStruct({name, cs, cs});
+        this->builtinTypes[name] = cs;
+        this->classTable[name] = cs;
+        return cs;
+    }
+    void ASTNode::addBuiltinIdent(std::string name, ClassStruct *type) {
+        builtinIdents[name] = type;
+    }
+    MethodStruct *ASTNode::addBuiltinMethod(ClassStruct *clazz, std::string name, ClassStruct *type, std::vector<ClassStruct*> const &argTypes) {
+        MethodStruct *ms = new MethodStruct({name, clazz, type, argTypes});
+        clazz->methodTable[name] = ms;
+        return ms;
+    }
+    
+/* TypedArg */
     void TypedArg::json(std::ostream &out, unsigned int indent){
         this->json_head(out, indent, "TypedArg");
         this->json_string(out, indent, "name_", this->name_);
         this->json_string(out, indent, "type_", this->type_);
         this->json_close(out, indent);
     }
+    
+/* Method */
     void Method::json(std::ostream &out, unsigned int indent) {
         this->json_head(out, indent, "Method");
         this->json_string(out, indent, "name_", this->name_);
@@ -118,6 +151,14 @@ namespace AST
         this->json_list<Statement*>(out, indent, "stmts_", *this->stmts_);
         this->json_close(out, indent);
     }
+    std::string Method::getType() const {
+        if (isTyped_)
+            return type_;
+        else
+            return "Nothing";
+    }
+    
+/* Class */
     void Class::json(std::ostream &out, unsigned int indent){
         this->json_head(out, indent, "Class");
         this->json_string(out, indent, "name_", this->name_);
@@ -127,100 +168,14 @@ namespace AST
         this->json_list<Method*>(out, indent, "mthds_", *this->mthds_);
         this->json_close(out, indent);
     }
+    
+/* Program */
     void Program::json(std::ostream &out, unsigned int indent){
         this->json_head(out, indent, "Program");
         this->json_list<Class*>(out, indent, "classes_", *this->classes_);
         this->json_list<Statement*>(out, indent, "stmts_", *this->stmts_);
         this->json_close(out, indent);
     }
-    void If::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "If");
-        this->json_child(out, indent, "cond_", this->cond_);
-        this->json_list<Statement*>(out, indent, "if_true_", *this->if_true_stmts_);
-        this->json_list<Statement*>(out, indent, "if_false_", *this->if_false_stmts_);
-        this->json_close(out, indent);
-    }
-    void While::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "While");
-        this->json_child(out, indent, "cond_", this->cond_);
-        this->json_list<Statement*>(out, indent, "stmts_", *this->stmts_);
-        this->json_close(out, indent);
-    }
-    void LExpr::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "LExpr");
-        if (this->isField_)
-            this->json_child(out, indent, "obj_", this->obj_);
-        this->json_string(out, indent, "name_", this->name_);
-        this->json_close(out, indent);
-    }
-    void Assignment::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Assignment");
-        this->json_child(out, indent, "l_expr_", this->l_expr_);
-        if (this->isTyped_)
-            this->json_string(out, indent, "type_", this->type_);
-        this->json_child(out, indent, "r_expr_", this->r_expr_);
-        this->json_close(out, indent);
-    }
-    void Return::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Return");
-        if (!this->returnsNone_)
-            this->json_child(out, indent, "r_expr_", this->r_expr_);
-        this->json_close(out, indent);
-    }
-    void TypeAlt::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "TypeAlt");
-        this->json_string(out, indent, "name_", this->name_);
-        this->json_string(out, indent, "type_", this->type_);
-        this->json_list<Statement*>(out, indent, "stmts_", *this->stmts_);
-        this->json_close(out, indent);
-    }
-    void Typecase::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Typecase");
-        this->json_child(out, indent, "expr_", this->expr_);
-        this->json_list<TypeAlt*>(out, indent, "alternatives_", *this->alternatives_);
-        this->json_close(out, indent);
-    }
-    void IntLit::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Int");
-        this->json_int(out, indent, "val_", this->val_);
-        this->json_close(out, indent);
-    }
-    void StrLit::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "String");
-        this->json_string(out, indent, "text_", this->text_);
-        this->json_close(out, indent);
-    }
-    void Call::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Call");
-        this->json_child(out, indent, "obj_", this->obj_);
-        this->json_string(out, indent, "mthd_", this->mthd_);
-        this->json_list<RExpr*>(out, indent, "args_", *this->args_);
-        this->json_close(out, indent);
-    }
-    void Constructor::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Constructor");
-        this->json_string(out, indent, "name_", this->name_);
-        this->json_list<RExpr*>(out, indent, "args_", *this->args_);
-        this->json_close(out, indent);
-    }
-    void And::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "And");
-        this->json_child(out, indent, "lhs_", this->lhs_);
-        this->json_child(out, indent, "rhs_", this->rhs_);
-        this->json_close(out, indent);
-    }
-    void Or::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Or");
-        this->json_child(out, indent, "lhs_", this->lhs_);
-        this->json_child(out, indent, "rhs_", this->rhs_);
-        this->json_close(out, indent);
-    }
-    void Not::json(std::ostream &out, unsigned int indent) {
-        this->json_head(out, indent, "Not");
-        this->json_child(out, indent, "expr_", this->expr_);
-        this->json_close(out, indent);
-    }
-    
     void Program::addBuiltins() {
         ClassStruct *Obj     = this->addBuiltinType("Obj", nullptr);
         ClassStruct *Nothing = this->addBuiltinType("Nothing", Obj);
@@ -241,7 +196,314 @@ namespace AST
         this->addBuiltinMethod(Int,    "TIMES",  Int,     std::vector<ClassStruct*>(1, Int));
         this->addBuiltinMethod(Int,    "DIVIDE", Int,     std::vector<ClassStruct*>(1, Int));
     }
-    
+    void Program::buildClassMap(bool &failed) {
+        std::string name, super;
+        ClassStruct *cs;
+        //Get class declarations
+        for (Class *c : *this->classes_) {
+            name = c->getName();
+            if (classTable.find(name) == classTable.end()) {
+                cs = new ClassStruct({name, nullptr});
+                classTable[name] = cs;
+                c->setClassStruct(cs);
+            } else {
+                std::cerr << c->getPosition() << "Error: Redefinition of class \"" << name << "\"" << std::endl;
+                failed = true;
+            }
+        }
+        //Find class inheritance
+        if (!failed) {
+            for (Class *c : *this->classes_) {
+                name = c->getName();
+                super = c->getExtends();
+                if (classTable.find(super) == classTable.end()) {
+                    std::cerr << c->getPosition() << "Error: Class \"" << name << "\" extends unrecognized type \"" << super << "\"" << std::endl;
+                    failed = true;
+                } else if (this->builtinTypes.find(super) != this->builtinTypes.end() && 
+                           super != "Obj") {
+                    std::cerr << c->getPosition() << "Error: Class \"" << name << "\" cannot derive from builtin type \"" << super << "\"" << std::endl;
+                    failed = true;
+                } else {
+                    c->getClassStruct()->super = classTable[super];
+                    classTable[super]->children.push_back(c->getClassStruct());
+                }
+            }
+        }
+    }
+    void Program::checkClassHierarchy(bool &failed) {
+        ClassStruct *curr1, *curr2;
+        std::map<ClassStruct*, bool> noCycles;
+        
+        buildClassMap(failed);
+        for (auto it : this->classTable) {
+            ClassStruct *cs = it.second;
+            if (!cs->super) {
+                noCycles[cs] = true;
+            } else {
+                noCycles[cs] = false;
+            }
+        }
+        for (auto it : this->classTable) {
+            ClassStruct *cs = it.second;
+            bool foundCycle = false;
+            curr1 = cs;
+            if (noCycles[curr1])
+                continue;
+            curr2 = curr1->super;
+            while (!noCycles[curr1] && !noCycles[curr2]) {
+                if (curr1 == curr2) {
+                    std::cerr << "Error: Class hierarchy contains a cycle involving class \"" << curr1->name << "\"" << std::endl;
+                    failed = true;
+                    foundCycle = true;
+                    break;
+                }
+                if (curr1->super) {
+                    curr1 = curr1->super;
+                } else {
+                    break;
+                }
+                if (curr2->super && curr2->super->super) {
+                    curr2 = curr2->super->super;
+                } else {
+                    break;
+                }
+            }
+            if (!foundCycle) {
+                curr1 = cs;
+                while (!noCycles[curr1]) {
+                    noCycles[curr1] = true;
+                    if (curr1->super) {
+                        curr1 = curr1->super;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    void Program::buildLCAs(bool &failed) {
+        std::map<ClassStruct*, std::vector<ClassStruct*>> paths;
+        ClassStruct *curr;
+        for (auto it : this->classTable) {
+            curr = it.second;
+            while (curr != nullptr) {
+                paths[it.second].push_back(curr);
+                curr = curr->super;
+            }
+        }
+        for (auto it1 = paths.begin(); it1 != paths.end(); it1++) {
+            for (auto it2 = it1; it2 != paths.end(); it2++) {
+                auto curr1 = it1->second.rbegin();
+                auto curr2 = it2->second.rbegin();
+                auto prev = curr1;
+                while (*curr1 == *curr2 && 
+                        curr1 != it1->second.rend() && 
+                        curr2 != it2->second.rend()) {
+                    prev = curr1;
+                    curr1++;
+                    curr2++;
+                }
+                it1->first->LCA[it2->first] = *prev;
+                it2->first->LCA[it1->first] = *prev;
+            }
+        }
+    }
+    void Program::buildMethodTables(bool &failed) {
+        ClassStruct *argType;
+        MethodStruct *ms;
+        std::string methodName, argTypeName;
+        for (Class *c : *this->classes_) {
+            ClassStruct *cs = c->getClassStruct();
+            for (Method *m : *c->getMethods()) {
+                methodName = m->getName();
+                if (cs->methodTable.find(methodName) != cs->methodTable.end()) {
+                    std::cerr << m->getPosition() << "Error: Redefinition of method \"" << cs->name << "." << methodName << "\"" << std::endl;
+                    failed = true;
+                } else {
+                    ms = new MethodStruct({m->getName(), cs});
+                    for (TypedArg *arg : *m->getArgs()) {
+                        argTypeName = arg->getType();
+                        if (this->classTable.find(argTypeName) == this->classTable.end()) {
+                            std::cerr << arg->getPosition() << "Error: Argument \"" << arg->getName()
+                                    << "\" of method \"" << cs->name << "." << ms->name << "()\""
+                                    << " has unrecognized type \"" << argTypeName << "\"" << std::endl;
+                            failed = true;
+                        }else{
+                            argType = this->classTable[arg->getType()];
+                            ms->argTypes.push_back(argType);
+                            ms->symbolTable[arg->getName()] = std::pair<ClassStruct*, bool>(argType, true);
+                        }
+                    }
+                    for (auto it : this->builtinIdents) {
+                        ms->symbolTable[it.first] = std::pair<ClassStruct*, bool>(it.second, true);
+                    }
+                    ms->type = this->classTable[m->getType()];
+                    cs->methodTable[methodName] = ms;
+                    m->setMethodStruct(ms);
+                }
+            }
+            cs->constructor = new MethodStruct({cs->name, cs, cs});
+            for (TypedArg *arg : *c->getArgs()) {
+                argTypeName = arg->getType();
+                if (this->classTable.find(argTypeName) == this->classTable.end()) {
+                    std::cerr << arg->getPosition() << "Error: Argument \"" << arg->getName()
+                            << "\" of class \"" << cs->name 
+                            << "\" constructor has unrecognized type \"" << argTypeName << "\"" << std::endl;
+                    failed = true;
+                }else{
+                    argType = this->classTable[arg->getType()];
+                    cs->constructor->argTypes.push_back(argType);
+                    cs->constructor->symbolTable[arg->getName()] = std::pair<ClassStruct*, bool>(argType, true);
+                }
+            }
+            for (auto it : this->builtinIdents) {
+                cs->constructor->symbolTable[it.first] = std::pair<ClassStruct*, bool>(it.second, true);
+            }
+        }
+        this->body_ = new MethodStruct({"Body", nullptr, nullptr});
+        for (auto it : this->builtinIdents) {
+            this->body_->symbolTable[it.first] = std::pair<ClassStruct*, bool>(it.second, true);
+        }
+    }
+    void Program::checkMethodInheritance(bool &failed) {
+        std::map<ClassStruct*, bool> checked;
+        std::stack<ClassStruct*> classStack;
+        ClassStruct *curr;
+        MethodStruct *ms, *super_ms;
+        size_t i;
+        for (auto it : this->classTable) {
+            if (it.second->super == nullptr) {
+                checked[it.second] = true;
+            } else {
+                checked[it.second] = false;
+            }
+        }
+        for (auto it : this->classTable) {
+            curr = it.second;
+            while (!checked[curr]) {
+                classStack.push(curr);
+                curr = curr->super;
+            }
+            while (!classStack.empty()) {
+                curr = classStack.top();
+                classStack.pop();
+                for (auto mthdKeyValue : curr->super->methodTable) {
+                    if (curr->methodTable.find(mthdKeyValue.first) != curr->methodTable.end()) {
+                        ms = curr->methodTable[mthdKeyValue.first];
+                        super_ms = mthdKeyValue.second;
+                        if (ms->type->LCA[super_ms->type] != super_ms->type) {
+                            std::cerr << "Error: Inherited method \"" << curr->name << "." << ms->name << "()\" does not return a subtype of its overridden method" << std::endl;
+                            failed = true;
+                        }
+                        if (ms->argTypes.size() != super_ms->argTypes.size()) {
+                            std::cerr << "Error: Inherited method \"" << curr->name << "." << ms->name << "()\" does not share the same number of arguments as its overridden method" << std::endl;
+                            failed = true;
+                        } else {
+                            for (i = 0; i < ms->argTypes.size(); i++) {
+                                if (ms->argTypes[i]->LCA[super_ms->argTypes[i]] != ms->argTypes[i]) {
+                                    std::cerr << "Error: Argument " << i+1 << " of inherited method \"" << curr->name << "." << ms->name << "()\" is not a supertype of its overridden argument" << std::endl;
+                                    failed = true;
+                                }
+                            }
+                        }
+                        
+                    } else {
+                        curr->methodTable[mthdKeyValue.first] = mthdKeyValue.second;
+                    }
+                }
+                checked[curr] = true;
+            }
+        }
+    }
+    void Program::getVars(bool &failed) {
+        std::vector<std::string> fields, fieldCopy, vars;
+        std::map<std::string, std::pair<ClassStruct*, bool>> fieldTable;
+        MethodStruct *ms;
+        for (Class *c : *this->classes_) {
+            ClassStruct *cs = c->getClassStruct();
+            cs->constructor->symbolTable["this"] = std::pair<ClassStruct*, bool>(cs, true);
+            for (auto sym_key_value : cs->constructor->symbolTable) {
+                vars.push_back(sym_key_value.first);
+            }
+            for (Statement *s : *c->getStatements()) {
+                s->getVars(vars, fields, cs->constructor->symbolTable, fieldTable, true, failed);
+            }
+            for (std::string field : fields) {
+                cs->fieldTable[field] = fieldTable[field];
+            }
+            vars.clear();
+            fieldTable.clear();
+            for (Method *m : *c->getMethods()) {
+                ms = m->getMethodStruct();
+                ms->symbolTable["this"] = std::pair<ClassStruct*, bool>(cs, true);
+                for (auto sym_key_value : ms->symbolTable) {
+                    vars.push_back(sym_key_value.first);
+                }
+                for (Statement *s : *m->getStatements()) {
+                    fieldCopy = fields;
+                    s->getVars(vars, fieldCopy, ms->symbolTable, fieldTable, false, failed);
+                }
+                vars.clear();
+                fieldTable.clear();
+            }
+            fields.clear();
+        }
+        for (auto sym_key_value : this->body_->symbolTable) {
+            vars.push_back(sym_key_value.first);
+        }
+        for (Statement *s : *this->stmts_) {
+            s->getVars(vars, fields, this->body_->symbolTable, fieldTable, false, failed);
+        }
+    }
+    void Program::inferTypes(bool &failed) {
+        bool changed;
+        ClassStruct *cs;
+        MethodStruct *ms;
+        int pass = 1;
+        do {
+            std::cout << "Pass " << pass++ << std::endl;
+            changed = false;
+            for (Class *c : *this->classes_) {
+                cs = c->getClassStruct();
+                for (Statement *s : *c->getStatements()) {
+                    s->updateTypes(cs, cs->constructor, changed, failed);
+                }
+                for (Method *m : *c->getMethods()) {
+                    ms = m->getMethodStruct();
+                    for (Statement *s : *m->getStatements()) {
+                        s->updateTypes(cs, ms, changed, failed);
+                    }
+                }
+            }
+            for (Statement *s : *this->stmts_) {
+                s->updateTypes(nullptr, this->body_, changed, failed);
+            }
+        } while (changed && !failed);
+        for (Class *c : *this->classes_) {
+            cs = c->getClassStruct();
+            for (auto it : cs->fieldTable) {
+                if (it.second.first == nullptr) {
+                    std::cerr << "Error: Type of field \"" << cs->name << "." << it.first << "\" could not be inferred" << std::endl;
+                    failed = true;
+                }
+            }
+            for (Method *m : *c->getMethods()) {
+                ms = m->getMethodStruct();
+                for (auto it : ms->symbolTable) {
+                    if (it.second.first == nullptr) {
+                        std::cerr << "Error: Type of variable \"" << it.first << "\" in method \"" << cs->name << "." << ms->name << "()\" could not be inferred" << std::endl;
+                        failed = true;
+                    }
+                }
+            }
+        }
+        for (auto it : this->body_->symbolTable) {
+            if (it.second.first == nullptr) {
+                std::cerr << "Error: Type of variable \"" << it.first << "\" in program body could not be inferred" << std::endl;
+                failed = true;
+            }
+        }
+    }
     bool Program::typeCheck() {
         bool failed = false;
         std::string T = "├", Bar = "│", Elbow = "└", Dash = "─";
@@ -462,289 +724,633 @@ namespace AST
         } 
         return failed;
     }
-    void Program::buildClassMap(bool &failed) {
-        std::string name, super;
-        ClassStruct *cs;
-        //Get class declarations
-        for (Class *c : *this->classes_) {
-            name = c->getName();
-            if (classTable.find(name) == classTable.end()) {
-                cs = new ClassStruct({name, nullptr});
-                classTable[name] = cs;
-                c->setClassStruct(cs);
-            } else {
-                std::cerr << c->getPosition() << " Error: Redefinition of class \"" << name << "\"" << std::endl;
+   
+/* TypeAlt */
+    void TypeAlt::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "TypeAlt");
+        this->json_string(out, indent, "name_", this->name_);
+        this->json_string(out, indent, "type_", this->type_);
+        this->json_list<Statement*>(out, indent, "stmts_", *this->stmts_);
+        this->json_close(out, indent);
+    }
+    
+/* RExpr */
+    void RExpr::updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+        this->getType(thisClass, thisMethod, failed);
+    }
+    
+/* If */
+    void If::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "If");
+        this->json_child(out, indent, "cond_", this->cond_);
+        this->json_list<Statement*>(out, indent, "if_true_", *this->if_true_stmts_);
+        this->json_list<Statement*>(out, indent, "if_false_", *this->if_false_stmts_);
+        this->json_close(out, indent);
+    }
+    void If::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> varCopy1 = vars, varCopy2, fieldCopy1 = fields, fieldCopy2;
+        cond_->getVars(varCopy1, fields, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy1, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy1, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        fieldCopy1 = fields;
+        varCopy1 = vars;
+        for (Statement *s : *if_true_stmts_) {
+            s->getVars(varCopy1, fieldCopy1, varTable, fieldTable, inConstructor, failed);
+        }
+        fieldCopy2 = fields;
+        varCopy2 = vars;
+        for (Statement *s : *if_false_stmts_) {
+            s->getVars(varCopy2, fieldCopy2, varTable, fieldTable, inConstructor, failed);
+        }
+        fields = intersection(fieldCopy1, fieldCopy2);
+        vars = intersection(varCopy1, varCopy2);
+    }
+    void If::updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+        ClassStruct *condType = cond_->getType(thisClass, thisMethod, failed);
+        if (condType != nullptr && condType != this->builtinTypes["Boolean"]) {
+            std::cerr << this->getPosition() << "Error: If statement uses type \"" << condType->name << "\" as condition, must be of type Boolean" << std::endl;
+            failed = true;
+        }
+        for (Statement *s : *if_true_stmts_) {
+            s->updateTypes(thisClass, thisMethod, changed, failed);
+        }
+        for (Statement *s : *if_false_stmts_) {
+            s->updateTypes(thisClass, thisMethod, changed, failed);
+        }
+    }
+    
+/* While */
+    void While::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "While");
+        this->json_child(out, indent, "cond_", this->cond_);
+        this->json_list<Statement*>(out, indent, "stmts_", *this->stmts_);
+        this->json_close(out, indent);
+    }
+    void While::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        cond_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        fieldCopy = fields;
+        varCopy = vars;
+        for (Statement *s : *stmts_) {
+            s->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        }           
+    }
+    void While::updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+        ClassStruct *condType = cond_->getType(thisClass, thisMethod, failed);
+        if (condType != nullptr && condType != this->builtinTypes["Boolean"]) {
+            std::cerr << this->getPosition() << "Error: While statement uses type \"" << condType->name << "\" as condition, must be of type Boolean" << std::endl;
+            failed = true;
+        }
+        for (Statement *s : *stmts_) {
+            s->updateTypes(thisClass, thisMethod, changed, failed);
+        }
+    }
+    
+/* LExpr */
+    void LExpr::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "LExpr");
+        if (this->isField_)
+            this->json_child(out, indent, "obj_", this->obj_);
+        this->json_string(out, indent, "name_", this->name_);
+        this->json_close(out, indent);
+    }
+    bool LExpr::isAssignable() const {
+        return (isField_ && obj_->isThis()) || 
+               (!isField_ && this->builtinIdents.find(name_) == this->builtinIdents.end() && this->name_ != "this");
+    }
+    void LExpr::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        if (isField_) {
+            if (obj_->isThis()) {
+                if (std::find(fields.begin(), fields.end(), this->name_) == fields.end()) {
+                    std::cerr << this->getPosition() << "Error: \"this." << this->name_ << "\" used before initialization" << std::endl;
+                    failed = true;
+                }
+            }
+        } else {
+            //Local variable
+            if (std::find(vars.begin(), vars.end(), this->name_) == vars.end()) {
+                std::cerr << this->getPosition() << "Error: \"" << this->name_ << "\" used before initialization" << std::endl;
                 failed = true;
             }
         }
-        //Find class inheritance
-        for (Class *c : *this->classes_) {
-            name = c->getName();
-            super = c->getExtends();
-            if (classTable.find(super) == classTable.end()) {
-                std::cerr << c->getPosition() << " Error: Class \"" << name << "\" extends unrecognized type \"" << super << "\"" << std::endl;
-                failed = true;
-            } else if (this->builtinTypes.find(super) != this->builtinTypes.end() && 
-                       super != "Obj") {
-                std::cerr << c->getPosition() << " Error: Class \"" << name << "\" cannot derive from builtin type \"" << super << "\"" << std::endl;
-                failed = true;
+    }
+    ClassStruct *LExpr::getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+        ClassStruct *objType;
+        if (isField_) {
+            objType = obj_->getType(thisClass, thisMethod, failed);
+            if (objType != nullptr) {
+                if (objType->fieldTable.find(this->name_) != objType->fieldTable.end()) {
+                    return objType->fieldTable[this->name_].first;
+                } else {
+                    std::cerr << this->getPosition() << "Error: \"" << this->name_ << "\" is not a field of class \"" << objType->name << "\"" << std::endl;
+                    failed = true;
+                }
+            }
+        } else if (this->name_ == "this") { 
+            return thisClass;
+        } else if (this->builtinIdents.find(this->name_) != this->builtinIdents.end()) {
+            return this->builtinIdents[this->name_];
+        } else {
+            return thisMethod->symbolTable[this->name_].first;
+        }
+        return nullptr;
+    }
+
+/* Assignment */
+    void Assignment::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Assignment");
+        this->json_child(out, indent, "l_expr_", this->l_expr_);
+        if (this->isTyped_)
+            this->json_string(out, indent, "type_", this->type_);
+        this->json_child(out, indent, "r_expr_", this->r_expr_);
+        this->json_close(out, indent);
+    }
+    void Assignment::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        std::string fieldName, varName;
+        r_expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+
+        if (l_expr_->isField()) { // LExpr is of the form "[RExpr].[Ident]"
+            fieldName = l_expr_->getName();
+            if (l_expr_->isAssignable()) {
+                if (std::find(fields.begin(), fields.end(), fieldName) == fields.end()) {
+                    fields.push_back(fieldName);
+                }
+                if (isTyped_) {
+                    if (this->classTable.find(this->type_) != this->classTable.end()) {
+                        if (fieldTable.find(fieldName) == fieldTable.end()) {
+                            fieldTable[fieldName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                        } else if (fieldTable[fieldName].second) {
+                            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" cannot have more than one explicit type definition" << std::endl;
+                            failed = true;
+                        } else {
+                            fieldTable[fieldName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                        }
+                    } else {
+                        std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" given unrecognized explicit type \"" << this->type_ << "\"" << std::endl;
+                        failed = true;
+                    }
+                } else {
+                    if (fieldTable.find(fieldName) == fieldTable.end()) {
+                        fieldTable[fieldName] = std::pair<ClassStruct*, bool>(nullptr, false);
+                    }
+                }
             } else {
-                c->getClassStruct()->super = classTable[super];
-                classTable[super]->children.push_back(c->getClassStruct());
+                std::cerr << this->getPosition() << "Error: Cannot assign to field \"" << fieldName << "\" outside of its class's methods" << std::endl;
+                failed = true;
+            }
+        } else {
+            varName = l_expr_->getName();
+            if (l_expr_->isAssignable()) {
+                if (std::find(vars.begin(), vars.end(), varName) == vars.end()) {
+                    vars.push_back(varName);
+                }
+                if (isTyped_) {
+                    if (this->classTable.find(this->type_) != this->classTable.end()) {
+                        if (varTable.find(varName) == varTable.end()) {
+                            varTable[varName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                        } else if (varTable[varName].second) {
+                            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" cannot have more than one explicit type definition" << std::endl;
+                            failed = true;
+                        } else {
+                            varTable[varName] = std::pair<ClassStruct*, bool>(this->classTable[this->type_], true);
+                        }
+                    } else {
+                        std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" given unrecognized explicit type \"" << this->type_ << "\"" << std::endl;
+                        failed = true;
+                    }
+                } else {
+                    if (varTable.find(varName) == varTable.end()) {
+                        varTable[varName] = std::pair<ClassStruct*, bool>(nullptr, false);
+                    }
+                }
+            } else {
+                std::cerr << this->getPosition() << "Error: Cannot assign to protected variable \"" << varName << "\"" << std::endl;
+                failed = true;
+            }
+        }
+    }
+    void Assignment::updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+        std::string l_expr_name = l_expr_->getName();
+        ClassStruct *r_expr_type = r_expr_->getType(thisClass, thisMethod, failed);
+        ClassStruct *LCAType, *prevType;
+        if (r_expr_type){
+            if (l_expr_->isAssignable()) {
+                if (l_expr_->isField()) {
+                    if (thisClass->fieldTable.find(l_expr_name) == thisClass->fieldTable.end()) {
+                        std::cerr << this->getPosition() << "Error: Class \"" << thisClass->name << "\" does not contain the field \"" << l_expr_name << "\"" << std::endl;
+                        failed = true;
+                    } else {
+                        prevType = thisClass->fieldTable[l_expr_name].first;
+                        if (prevType == nullptr) {
+                            thisClass->fieldTable[l_expr_name] = std::pair<ClassStruct*, bool>(r_expr_type, false);
+                            changed = true;
+                        } else {
+                            LCAType = prevType->LCA[r_expr_type];
+                            if (LCAType != prevType) {
+                                if (thisClass->fieldTable[l_expr_name].second) {
+                                    std::cerr << this->getPosition() << "Error: Field \"" << l_expr_name << "\" cannot be assigned to type \"" 
+                                            << r_expr_type->name << "\" because it is not a subtype of its explicit type \"" << prevType->name << "\"" << std::endl;
+                                    failed = true;
+                                } else {
+                                    thisClass->fieldTable[l_expr_name] = std::pair<ClassStruct*, bool>(LCAType, false);
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (thisMethod->symbolTable.find(l_expr_name) == thisMethod->symbolTable.end()) {
+                        std::cerr << this->getPosition() << "Error: Variable \"" << l_expr_name << "\" does not exist in the current context" << std::endl;
+                        failed = true;
+                    } else {
+                        prevType = thisMethod->symbolTable[l_expr_name].first;
+                        if (prevType == nullptr) {
+                            thisMethod->symbolTable[l_expr_name] = std::pair<ClassStruct*, bool>(r_expr_type, false);
+                            changed = true;
+                        } else {
+                            LCAType = prevType->LCA[r_expr_type];
+                            if (LCAType != prevType) {
+                                if (thisMethod->symbolTable[l_expr_name].second) {
+                                    std::cerr << this->getPosition() << "Error: Variable \"" << l_expr_name << "\" cannot be assigned to type \"" 
+                                            << r_expr_type->name << "\" because it is not a subtype of its explicit type \"" << prevType->name << "\"" << std::endl;
+                                    failed = true;
+                                } else {
+                                    thisMethod->symbolTable[l_expr_name] = std::pair<ClassStruct*, bool>(LCAType, false);
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                std::cerr << this->getPosition() << "Error: Cannot assign to variable \"" << l_expr_name << "\"" << std::endl;
+                failed = true;
             }
         }
     }
     
-    void Program::checkClassHierarchy(bool &failed) {
-        bool foundCycle;
-        ClassStruct *curr1, *curr2;
-        std::map<ClassStruct*, bool> noCycles;
-        
-        buildClassMap(failed);
-        for (auto it : this->classTable) {
-            ClassStruct *cs = it.second;
-            if (!cs->super) {
-                noCycles[cs] = true;
+/* Return */
+    void Return::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Return");
+        if (!this->returnsNone_)
+            this->json_child(out, indent, "r_expr_", this->r_expr_);
+        this->json_close(out, indent);
+    }
+    void Return::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        if (inConstructor) {
+            std::cerr << this->getPosition() << "Error: Return statement not allowed in constructor" << std::endl;
+            failed = true;
+        }
+        r_expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+    }
+    void Return::updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+        if (!returnsNone_) {
+            r_expr_->updateTypes(thisClass, thisMethod, changed, failed);
+        }
+    }
+    
+/* Typecase */
+    void Typecase::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Typecase");
+        this->json_child(out, indent, "expr_", this->expr_);
+        this->json_list<TypeAlt*>(out, indent, "alternatives_", *this->alternatives_);
+        this->json_close(out, indent);
+    }
+    void Typecase::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        std::string altName, altType;
+        expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (TypeAlt *alt : *alternatives_) {
+            altName = alt->getName();
+            if (varTable.find(altName) != varTable.end()) {
+                std::cerr << this->getPosition() << "Error: Typecase cannot introduce the variable \"" << altName << "\" because it already exists in this scope" << std::endl;
+                failed = true;
             } else {
-                noCycles[cs] = false;
-            }
-        }
-        for (auto it : this->classTable) {
-            ClassStruct *cs = it.second;
-            foundCycle = false;
-            curr1 = cs;
-            if (noCycles[curr1])
-                continue;
-            curr2 = curr1->super;
-            while (!noCycles[curr1] && !noCycles[curr2]) {
-                if (curr1 == curr2) {
-                    std::cerr << "Error: Class hierarchy contains a cycle involving class \"" << curr1->name << "\"" << std::endl;
+                fieldCopy = fields;
+                varCopy = vars;
+                altType = alt->getType();
+                if (this->classTable.find(altType) == this->classTable.end()) {
+                    std::cerr << this->getPosition() << "Error: Typecase cannot introduce variable of unrecognized type \"" << altType << "\"" << std::endl;
                     failed = true;
-                    foundCycle = true;
-                    break;
-                }
-                if (curr1->super) {
-                    curr1 = curr1->super;
                 } else {
-                    break;
-                }
-                if (curr2->super && curr2->super->super) {
-                    curr2 = curr2->super->super;
-                } else {
-                    break;
-                }
-            }
-            if (!foundCycle) {
-                curr1 = cs;
-                while (!noCycles[curr1]) {
-                    noCycles[curr1] = true;
-                    if (curr1->super) {
-                        curr1 = curr1->super;
-                    } else {
-                        break;
+                    varTable[altName] = std::pair<ClassStruct*, bool>(this->classTable[altType], true);
+                    for (Statement *s : *alt->getStatements()) {
+                        s->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
                     }
                 }
             }
         }
     }
-    void Program::buildLCAs(bool &failed) {
-        std::map<ClassStruct*, std::vector<ClassStruct*>> paths;
-        ClassStruct *curr;
-        for (auto it : this->classTable) {
-            curr = it.second;
-            while (curr != nullptr) {
-                paths[it.second].push_back(curr);
-                curr = curr->super;
-            }
-        }
-        for (auto it1 = paths.begin(); it1 != paths.end(); it1++) {
-            for (auto it2 = it1; it2 != paths.end(); it2++) {
-                auto curr1 = it1->second.rbegin();
-                auto curr2 = it2->second.rbegin();
-                auto prev = curr1;
-                while (*curr1 == *curr2 && 
-                        curr1 != it1->second.rend() && 
-                        curr2 != it2->second.rend()) {
-                    prev = curr1;
-                    curr1++;
-                    curr2++;
-                }
-                it1->first->LCA[it2->first] = *prev;
-                it2->first->LCA[it1->first] = *prev;
+    void Typecase::updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod, bool &changed, bool &failed) {
+        expr_->updateTypes(thisClass, thisMethod, changed, failed);
+        for (TypeAlt *alt : *alternatives_) {
+            for (Statement *s : *alt->getStatements()) {
+                s->updateTypes(thisClass, thisMethod, changed, failed);
             }
         }
     }
-    void Program::buildMethodTables(bool &failed) {
-        ClassStruct *cs, *argType;
-        MethodStruct *ms;
-        std::string methodName, argTypeName;
-        for (Class *c : *this->classes_) {
-            cs = c->getClassStruct();
-            for (Method *m : *c->getMethods()) {
-                methodName = m->getName();
-                if (cs->methodTable.find(methodName) != cs->methodTable.end()) {
-                    std::cerr << m->getPosition() << " Error: Redefinition of method \"" << cs->name << "." << methodName << "\"" << std::endl;
-                    failed = true;
-                } else {
-                    ms = new MethodStruct({m->getName(), cs});
-                    for (TypedArg *arg : *m->getArgs()) {
-                        argTypeName = arg->getType();
-                        if (this->classTable.find(argTypeName) == this->classTable.end()) {
-                            std::cerr << arg->getPosition() << " Error: Argument \"" << arg->getName()
-                                    << "\" of method \"" << cs->name << "." << ms->name << "()\""
-                                    << " has unrecognized type \"" << argTypeName << "\"" << std::endl;
-                            failed = true;
-                        }else{
-                            argType = this->classTable[arg->getType()];
-                            ms->argTypes.push_back(argType);
-                            ms->symbolTable[arg->getName()] = std::pair<ClassStruct*, bool>(argType, true);
-                        }
-                    }
-                    for (auto it : this->builtinIdents) {
-                        ms->symbolTable[it.first] = std::pair<ClassStruct*, bool>(it.second, true);
-                    }
-                    ms->type = this->classTable[m->getType()];
-                    cs->methodTable[methodName] = ms;
-                    m->setMethodStruct(ms);
-                }
-            }
-            cs->constructor = new MethodStruct({cs->name, cs, cs});
-            for (TypedArg *arg : *c->getArgs()) {
-                argTypeName = arg->getType();
-                if (this->classTable.find(argTypeName) == this->classTable.end()) {
-                    std::cerr << arg->getPosition() << " Error: Argument \"" << arg->getName()
-                            << "\" of class \"" << cs->name 
-                            << "\" constructor has unrecognized type \"" << argTypeName << "\"" << std::endl;
-                    failed = true;
-                }else{
-                    argType = this->classTable[arg->getType()];
-                    cs->constructor->argTypes.push_back(argType);
-                    cs->constructor->symbolTable[arg->getName()] = std::pair<ClassStruct*, bool>(argType, true);
-                }
-            }
-            for (auto it : this->builtinIdents) {
-                cs->constructor->symbolTable[it.first] = std::pair<ClassStruct*, bool>(it.second, true);
-            }
+    
+/* IntLit */
+    void IntLit::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Int");
+        this->json_int(out, indent, "val_", this->val_);
+        this->json_close(out, indent);
+    }
+
+/* StrLit */
+    void StrLit::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "String");
+        this->json_string(out, indent, "text_", this->text_);
+        this->json_close(out, indent);
+    }
+    
+/* Call */
+    void Call::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Call");
+        this->json_child(out, indent, "obj_", this->obj_);
+        this->json_string(out, indent, "mthd_", this->mthd_);
+        this->json_list<RExpr*>(out, indent, "args_", *this->args_);
+        this->json_close(out, indent);
+    }
+    void Call::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        obj_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
         }
-        this->body_ = new MethodStruct({"Body", nullptr, nullptr});
-        for (auto it : this->builtinIdents) {
-            this->body_->symbolTable[it.first] = std::pair<ClassStruct*, bool>(it.second, true);
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (RExpr *arg : *args_) {
+            if (inConstructor && arg->isThis()) {
+                std::cerr << this->getPosition() << "Error: Cannot pass 'this' as argument from constructor" << std::endl;
+                failed = true;
+            }
+            fieldCopy = fields;
+            varCopy = vars;
+            arg->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+                failed = true;
+            }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+                failed = true;
+            }
         }
     }
-    void Program::checkMethodInheritance(bool &failed) {
-        std::map<ClassStruct*, bool> checked;
-        std::stack<ClassStruct*> classStack;
-        ClassStruct *curr;
-        MethodStruct *ms, *super_ms;
+    ClassStruct *Call::getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+        std::vector<ClassStruct*> argTypes;
         size_t i;
-        for (auto it : this->classTable) {
-            if (it.second->super == nullptr) {
-                checked[it.second] = true;
-            } else {
-                checked[it.second] = false;
-            }
-        }
-        for (auto it : this->classTable) {
-            curr = it.second;
-            while (!checked[curr]) {
-                classStack.push(curr);
-                curr = curr->super;
-            }
-            while (!classStack.empty()) {
-                curr = classStack.top();
-                classStack.pop();
-                for (auto mthdKeyValue : curr->super->methodTable) {
-                    if (curr->methodTable.find(mthdKeyValue.first) != curr->methodTable.end()) {
-                        ms = curr->methodTable[mthdKeyValue.first];
-                        super_ms = mthdKeyValue.second;
-                        if (ms->type->LCA[super_ms->type] != super_ms->type) {
-                            std::cerr << "Error: Inherited method \"" << curr->name << "." << ms->name << "()\" does not return a subtype of its overridden method" << std::endl;
-                            failed = true;
-                        }
-                        if (ms->argTypes.size() != super_ms->argTypes.size()) {
-                            std::cerr << "Error: Inherited method \"" << curr->name << "." << ms->name << "()\" does not share the same number of arguments as its overridden method" << std::endl;
-                            failed = true;
-                        } else {
-                            for (i = 0; i < ms->argTypes.size(); i++) {
-                                if (ms->argTypes[i]->LCA[super_ms->argTypes[i]] != ms->argTypes[i]) {
-                                    std::cerr << "Error: Argument " << i+1 << " of inherited method \"" << curr->name << "." << ms->name << "()\" is not a supertype of its overridden argument" << std::endl;
-                                    failed = true;
-                                }
+        ClassStruct *actualArgType, *LCAType, *objType;
+        bool allArgs = true;
+        objType = obj_->getType(thisClass, thisMethod, failed);
+        if (objType != nullptr) {
+            if (objType->methodTable.find(mthd_) == objType->methodTable.end()) {
+                std::cerr << this->getPosition() << "Error: \"" << mthd_ << "()\" is not a method of class \"" << objType->name << "\"" << std::endl;
+                failed = true;
+            }else{
+                argTypes = objType->methodTable[mthd_]->argTypes;
+                if (args_->size() != argTypes.size()) {
+                    std::cerr << this->getPosition() << "Error: Method \"" << mthd_ << "()\" of class \"" << objType->name << "\" takes " << argTypes.size() << " arguments, not " << args_->size() << std::endl;
+                    failed = true;
+                } else {
+                    for (i=0; i<args_->size(); i++) {
+                        actualArgType = (*args_)[i]->getType(thisClass, thisMethod, failed);
+                        if (actualArgType != nullptr) {
+                            LCAType = actualArgType->LCA[argTypes[i]];
+                            if (LCAType != argTypes[i]) {
+                                std::cerr << this->getPosition() << "Error: Argument " << i+1 << " of method \"" << this->mthd_ << "()\" of class \"" << objType->name 
+                                        << "\" has type \"" << actualArgType->name 
+                                        << "\" which is not a subtype of the required type \"" << argTypes[i]->name << "\"" << std::endl;
+                                failed = true;
+                                allArgs = false;
                             }
+                        } else {
+                            allArgs = false;
                         }
-                        
-                    } else {
-                        curr->methodTable[mthdKeyValue.first] = mthdKeyValue.second;
                     }
-                }
-                checked[curr] = true;
+                    if (allArgs) {
+                        return objType->methodTable[mthd_]->type;
+                    }
+                }   
+            }
+        }
+        return nullptr;
+    }           
+    
+/* Constructor */
+    void Constructor::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Constructor");
+        this->json_string(out, indent, "name_", this->name_);
+        this->json_list<RExpr*>(out, indent, "args_", *this->args_);
+        this->json_close(out, indent);
+    }
+    void Constructor::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy, varCopy;
+        if (this->classTable.find(name_) == this->classTable.end()) {
+            std::cerr << this->getPosition() << "Error: \"" << this->name_ << " \" constructor is for an unrecognized class" << std::endl;
+            failed = true;
+        }
+        for (RExpr *arg : *args_) {
+            if (inConstructor && arg->isThis()) {
+                std::cerr << this->getPosition() << "Error: Cannot pass 'this' as argument from constructor" << std::endl;
+                failed = true;
+            }
+            fieldCopy = fields;
+            varCopy = vars;
+            arg->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+            for (auto varName : difference(varCopy, vars)) {
+                std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+                failed = true;
+            }
+            for (auto fieldName : difference(fieldCopy, fields)) {
+                std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+                failed = true;
             }
         }
     }
-    void Program::getVars(bool &failed) {
-        std::vector<std::string> fields, fieldCopy, vars;
-        std::map<std::string, std::pair<ClassStruct*, bool>> fieldTable;
-        MethodStruct *ms;
-        ClassStruct *cs;
-        for (Class *c : *this->classes_) {
-            cs = c->getClassStruct();
-            cs->constructor->symbolTable["this"] = std::pair<ClassStruct*, bool>(cs, true);
-            for (auto sym_key_value : cs->constructor->symbolTable) {
-                vars.push_back(sym_key_value.first);
-            }
-            for (Statement *s : *c->getStatements()) {
-                s->getVars(vars, fields, cs->constructor->symbolTable, fieldTable, true, failed);
-            }
-            for (std::string field : fields) {
-                cs->fieldTable[field] = fieldTable[field];
-            }
-            vars.clear();
-            fieldTable.clear();
-            for (Method *m : *c->getMethods()) {
-                ms = m->getMethodStruct();
-                ms->symbolTable["this"] = std::pair<ClassStruct*, bool>(cs, true);
-                for (auto sym_key_value : ms->symbolTable) {
-                    vars.push_back(sym_key_value.first);
-                }
-                for (Statement *s : *m->getStatements()) {
-                    fieldCopy = fields;
-                    s->getVars(vars, fieldCopy, ms->symbolTable, fieldTable, false, failed);
-                }
-                vars.clear();
-                fieldTable.clear();
-            }
-            fields.clear();
-        }
-        for (auto sym_key_value : this->body_->symbolTable) {
-            vars.push_back(sym_key_value.first);
-        }
-        for (Statement *s : *this->stmts_) {
-            s->getVars(vars, fields, this->body_->symbolTable, fieldTable, false, failed);
-        }
-    }
-    void Program::inferTypes(bool &failed) {
-        bool changed;
-        ClassStruct *cs;
-        MethodStruct *ms;
-        int pass = 1;
-        do {
-            std::cout << "Pass " << pass++ << std::endl;
-            changed = false;
-            for (Class *c : *this->classes_) {
-                cs = c->getClassStruct();
-                for (Statement *s : *c->getStatements()) {
-                    s->updateTypes(cs, cs->constructor, changed, failed);
-                }
-                for (Method *m : *c->getMethods()) {
-                    ms = m->getMethodStruct();
-                    for (Statement *s : *m->getStatements()) {
-                        s->updateTypes(cs, ms, changed, failed);
+    ClassStruct *Constructor::getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+        std::vector<ClassStruct*> argTypes = this->classTable[name_]->constructor->argTypes;
+        size_t i;
+        ClassStruct *actualArgType, *LCAType;
+        if (args_->size() != argTypes.size()) {
+            std::cerr << this->getPosition() << "Error: Constructor for class \"" << name_ << "\" takes " << argTypes.size() << " arguments, not " << args_->size() << std::endl;
+            failed = true;
+        } else {
+            for (i=0; i<args_->size(); i++) {
+                actualArgType = (*args_)[i]->getType(thisClass, thisMethod, failed);
+                if (actualArgType != nullptr) {
+                    LCAType = actualArgType->LCA[argTypes[i]];
+                    if (LCAType != argTypes[i]) {
+                        std::cerr << this->getPosition() << "Error: Argument " << i+1 << " of \"" << this->name_ 
+                                << "\" constructor call has type \"" << actualArgType->name 
+                                << "\" which is not a subtype of the required type \"" << argTypes[i]->name << "\"" << std::endl;
+                        failed = true;
                     }
                 }
             }
-            for (Statement *s : *this->stmts_) {
-                s->updateTypes(nullptr, this->body_, changed, failed);
-            }
-        } while (changed && !failed);
+        }
+        return this->classTable[this->name_];
+    }
+    
+/* And */
+    void And::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "And");
+        this->json_child(out, indent, "lhs_", this->lhs_);
+        this->json_child(out, indent, "rhs_", this->rhs_);
+        this->json_close(out, indent);
+    }
+    void And::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        lhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        fieldCopy = fields;
+        varCopy = vars;
+        rhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+    }
+    ClassStruct *And::getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+        ClassStruct *exprType;
+        exprType = lhs_->getType(thisClass, thisMethod, failed);
+        if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+            std::cerr << this->getPosition() << "Error: Left-hand expression of 'and' is not a Boolean" << std::endl;
+            failed = true;
+        }
+        exprType = rhs_->getType(thisClass, thisMethod, failed);
+        if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+            std::cerr << this->getPosition() << "Error: Right-hand expression of 'and' is not a Boolean" << std::endl;
+            failed = true;
+        }
+        return this->builtinTypes["Boolean"];
+    }
+
+/* Or */
+    void Or::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Or");
+        this->json_child(out, indent, "lhs_", this->lhs_);
+        this->json_child(out, indent, "rhs_", this->rhs_);
+        this->json_close(out, indent);
+    }
+    void Or::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        lhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        fieldCopy = fields;
+        varCopy = vars;
+        rhs_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+    }
+    ClassStruct *Or::getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+        ClassStruct *exprType;
+        exprType = lhs_->getType(thisClass, thisMethod, failed);
+        if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+            std::cerr << this->getPosition() << "Error: Left-hand expression of 'or' is not a Boolean" << std::endl;
+            failed = true;
+        }
+        exprType = rhs_->getType(thisClass, thisMethod, failed);
+        if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+            std::cerr << this->getPosition() << "Error: Right-hand expression of 'or' is not a Boolean" << std::endl;
+            failed = true;
+        }
+        return this->builtinTypes["Boolean"];
+    }
+    
+/* Not */
+    void Not::json(std::ostream &out, unsigned int indent) {
+        this->json_head(out, indent, "Not");
+        this->json_child(out, indent, "expr_", this->expr_);
+        this->json_close(out, indent);
+    }
+    void Not::getVars(std::vector<std::string> &vars, std::vector<std::string> &fields, std::map<std::string, std::pair<ClassStruct*, bool>> &varTable, std::map<std::string, std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor, bool &failed) {
+        std::vector<std::string> fieldCopy = fields, varCopy = vars;
+        expr_->getVars(varCopy, fieldCopy, varTable, fieldTable, inConstructor, failed);
+        for (auto varName : difference(varCopy, vars)) {
+            std::cerr << this->getPosition() << "Error: Variable \"" << varName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+        for (auto fieldName : difference(fieldCopy, fields)) {
+            std::cerr << this->getPosition() << "Error: Field \"this." << fieldName << "\" used before initialization" << std::endl;
+            failed = true;
+        }
+    }
+    ClassStruct *Not::getType(ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
+        ClassStruct *exprType;
+        exprType = expr_->getType(thisClass, thisMethod, failed);
+        if (exprType != nullptr && exprType != this->builtinTypes["Boolean"]) {
+            std::cerr << this->getPosition() << "Error: Expression right of 'not' is not a Boolean" << std::endl;
+            failed = true;
+        }
+        return this->builtinTypes["Boolean"];
     }
 }
