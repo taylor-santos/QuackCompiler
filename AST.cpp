@@ -151,10 +151,10 @@ namespace AST {
         this->json_string(out, indent, "type_", this->type_);
         this->json_close(out, indent);
     }
-    
+
 /* Statement */
-    std::pair<ClassStruct*, bool> Statement::getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed) {
+    std::pair<ClassStruct*, bool> Statement::getReturnType(
+        ClassStruct *thisClass, MethodStruct *thisMethod, bool &failed) {
         return std::make_pair(nullptr, false);
     }
 
@@ -581,7 +581,7 @@ namespace AST {
                         << std::endl;
                 failed = true;
             }
-        }   
+        }
     }
     void Program::inferTypes(bool &failed) {
         bool changed;
@@ -663,12 +663,12 @@ namespace AST {
                         std::cerr << "Error: Class \"" << curr->name << "\""
                                 << " does not initialize field \""
                                 << fieldKeyValue.first << "\" inherited from "
-                                << "parent class \"" << curr->super->name 
+                                << "parent class \"" << curr->super->name
                                 << "\"" << std::endl;
                         failed = true;
                     } else {
                         ClassStruct *prevType = fieldKeyValue.second.first;
-                        ClassStruct *newType = 
+                        ClassStruct *newType =
                                 curr->fieldTable[fieldKeyValue.first].first;
                         if (newType->LCA[prevType] != prevType) {
                             std::cerr << "Error: Field \""
@@ -731,139 +731,138 @@ namespace AST {
             }
         }
     }
-    bool Program::typeCheck() {
+    bool Program::typeCheck(bool verbose) {
         bool failed = false;
         std::string T = "├", Bar = "│", Elbow = "└", Dash = "─";
         std::stack<std::pair<ClassStruct*, std::string>> classStack;
-        std::cout << "--------Checking Class Hierarchy--------" << std::endl;
+        if (verbose) {
+            std::cout << "--------Checking Class Hierarchy--------" << std::endl;
+        }
         addBuiltins();
         checkClassHierarchy(failed);
         if (failed) {
             return true;
         }
-        classStack.push(std::make_pair(this->builtinTypes["Obj"], ""));
-        while (!classStack.empty()) {
-            auto currPair = classStack.top();
-            classStack.pop();
-            std::cout << currPair.second << currPair.first->name << std::endl;
-            for (size_t i = 0; i < currPair.first->children.size(); i++) {
-                auto child = currPair.first->children[i];
-                std::string prefix = currPair.second;
-                size_t findIndex = 0;
-                while ((findIndex = prefix.find(T, findIndex)) !=
-                        std::string::npos) {
-                    prefix.replace(findIndex, T.length(), Bar);
-                    findIndex += Bar.length();
-                }
-                findIndex = 0;
-                while ((findIndex = prefix.find(Dash, findIndex)) !=
-                        std::string::npos) {
-                    prefix.replace(findIndex, Dash.length(), " ");
-                    findIndex += 1;
-                }
-                findIndex = 0;
-                while ((findIndex = prefix.find(Elbow, findIndex)) !=
-                        std::string::npos) {
-                    prefix.replace(findIndex, Elbow.length(), " ");
-                    findIndex += 1;
-                }
+        if (verbose) {
+            classStack.push(std::make_pair(this->builtinTypes["Obj"], ""));
+            while (!classStack.empty()) {
+                auto currPair = classStack.top();
+                classStack.pop();
+                std::cout << currPair.second << currPair.first->name << std::endl;
+                for (size_t i = 0; i < currPair.first->children.size(); i++) {
+                    auto child = currPair.first->children[i];
+                    std::string prefix = currPair.second;
+                    size_t findIndex = 0;
+                    while ((findIndex = prefix.find(T, findIndex)) !=
+                            std::string::npos) {
+                        prefix.replace(findIndex, T.length(), Bar);
+                        findIndex += Bar.length();
+                    }
+                    findIndex = 0;
+                    while ((findIndex = prefix.find(Dash, findIndex)) !=
+                            std::string::npos) {
+                        prefix.replace(findIndex, Dash.length(), " ");
+                        findIndex += 1;
+                    }
+                    findIndex = 0;
+                    while ((findIndex = prefix.find(Elbow, findIndex)) !=
+                            std::string::npos) {
+                        prefix.replace(findIndex, Elbow.length(), " ");
+                        findIndex += 1;
+                    }
 
-                if (i == 0) {
-                    classStack.push(std::make_pair(child, prefix + Elbow +
-                            Dash));
-                } else {
-                    classStack.push(std::make_pair(child, prefix + T + Dash));
+                    if (i == 0) {
+                        classStack.push(std::make_pair(child, prefix + Elbow +
+                                Dash));
+                    } else {
+                        classStack.push(std::make_pair(child, prefix + T + Dash));
+                    }
                 }
             }
+            std::cout << "-Building Lowest Common Ancestor Table--"
+                    << std::endl;
         }
-        std::cout << "-Building Lowest Common Ancestor Table--" << std::endl;
         buildLCAs(failed);
         if (failed) {
             return true;
         }
-        for (auto it : this->classTable) {
-            std::cout << "\t" << it.first;
-        }
-        std::cout << std::endl;
-        for (auto it1 : this->classTable) {
-            std::cout << it1.first << "\t";
-            for (auto it2 : this->classTable) {
-                std::cout << it1.second->LCA[it2.second]->name << "\t";
+        if (verbose) {
+            for (auto it : this->classTable) {
+                std::cout << "\t" << it.first;
             }
             std::cout << std::endl;
+            for (auto it1 : this->classTable) {
+                std::cout << it1.first << "\t";
+                for (auto it2 : this->classTable) {
+                    std::cout << it1.second->LCA[it2.second]->name << "\t";
+                }
+                std::cout << std::endl;
+            }
+            std::cout << "---------Building Method Tables---------"
+                    << std::endl;
         }
-        std::cout << "---------Building Method Tables---------" << std::endl;
         buildMethodTables(failed);
         if (failed) {
             return true;
         }
-        for (auto it : this->classTable) {
-            ClassStruct *cs = it.second;
-            for (auto it2 : cs->methodTable) {
-                MethodStruct *ms = it2.second;
-                std::cout << cs->name << "." << ms->name << "(";
-                std::string sep = "";
-                for (ClassStruct *arg : ms->argTypes) {
-                    std::cout << sep << arg->name;
-                    sep = ", ";
+        if (verbose) {
+            for (auto it : this->classTable) {
+                ClassStruct *cs = it.second;
+                for (auto it2 : cs->methodTable) {
+                    MethodStruct *ms = it2.second;
+                    std::cout << cs->name << "." << ms->name << "(";
+                    std::string sep = "";
+                    for (ClassStruct *arg : ms->argTypes) {
+                        std::cout << sep << arg->name;
+                        sep = ", ";
+                    }
+                    std::cout << ") : " << ms->type->name << std::endl;
                 }
-                std::cout << ") : " << ms->type->name << std::endl;
             }
+            std::cout << "------Checking Method Inheritance-------" << std::endl;
         }
-        std::cout << "------Checking Method Inheritance-------" << std::endl;
         checkMethodInheritance(failed);
         if (failed) {
             return true;
         }
-        for (auto it : this->classTable) {
-            ClassStruct *cs = it.second;
-            for (auto it2 : cs->methodTable) {
-                MethodStruct *ms = it2.second;
-                std::cout << cs->name << "." << ms->name << "(";
-                std::string sep = "";
-                for (ClassStruct *arg : ms->argTypes) {
-                    std::cout << sep << arg->name;
-                    sep = ", ";
+        if (verbose) {
+            for (auto it : this->classTable) {
+                ClassStruct *cs = it.second;
+                for (auto it2 : cs->methodTable) {
+                    MethodStruct *ms = it2.second;
+                    std::cout << cs->name << "." << ms->name << "(";
+                    std::string sep = "";
+                    for (ClassStruct *arg : ms->argTypes) {
+                        std::cout << sep << arg->name;
+                        sep = ", ";
+                    }
+                    std::cout << ") : " << ms->type->name << std::endl;
                 }
-                std::cout << ") : " << ms->type->name << std::endl;
             }
+            std::cout << "-----Finding Fields and Local Vars------" << std::endl;
         }
-        std::cout << "-----Finding Fields and Local Vars------" << std::endl;
         getVars(failed);
         if (failed) {
             return true;
         }
-        for (auto c : this->classTable) {
-            ClassStruct *cs = c.second;
-            if (this->builtinTypes.find(cs->name) == this->builtinTypes.end()) {
-                std::cout << "Class " << cs->name << std::endl;
-                std::cout << "    Fields:" << std::endl;
-                for (auto v : cs->fieldTable) {
-                    if (this->builtinIdents.find(v.first) ==
-                            this->builtinIdents.end()) {
-                        std::cout << "        this." << v.first;
-                        if (v.second.second) {
-                            std::cout << "\t* " << v.second.first->name;
+        if (verbose) {
+            for (auto c : this->classTable) {
+                ClassStruct *cs = c.second;
+                if (this->builtinTypes.find(cs->name) == this->builtinTypes.end()) {
+                    std::cout << "Class " << cs->name << std::endl;
+                    std::cout << "    Fields:" << std::endl;
+                    for (auto v : cs->fieldTable) {
+                        if (this->builtinIdents.find(v.first) ==
+                                this->builtinIdents.end()) {
+                            std::cout << "        this." << v.first;
+                            if (v.second.second) {
+                                std::cout << "\t* " << v.second.first->name;
+                            }
+                            std::cout << std::endl;
                         }
-                        std::cout << std::endl;
                     }
-                }
-                std::cout << "    Constructor Locals:" << std::endl;
-                for (auto v : cs->constructor->symbolTable) {
-                    if (this->builtinIdents.find(v.first) ==
-                            this->builtinIdents.end()) {
-                        std::cout << "        " << v.first;
-                        if (v.second.second) {
-                            std::cout << "\t* " << v.second.first->name;
-                        }
-                        std::cout << std::endl;
-                    }
-                }
-                for (auto m : cs->methodTable) {
-                    MethodStruct *ms = m.second;
-                    std::cout << "    " << ms->name << "() Locals:"
-                            << std::endl;
-                    for (auto v : ms->symbolTable) {
+                    std::cout << "    Constructor Locals:" << std::endl;
+                    for (auto v : cs->constructor->symbolTable) {
                         if (this->builtinIdents.find(v.first) ==
                                 this->builtinIdents.end()) {
                             std::cout << "        " << v.first;
@@ -873,64 +872,63 @@ namespace AST {
                             std::cout << std::endl;
                         }
                     }
+                    for (auto m : cs->methodTable) {
+                        MethodStruct *ms = m.second;
+                        std::cout << "    " << ms->name << "() Locals:"
+                                << std::endl;
+                        for (auto v : ms->symbolTable) {
+                            if (this->builtinIdents.find(v.first) ==
+                                    this->builtinIdents.end()) {
+                                std::cout << "        " << v.first;
+                                if (v.second.second) {
+                                    std::cout << "\t* " << v.second.first->name;
+                                }
+                                std::cout << std::endl;
+                            }
+                        }
+                    }
                 }
             }
-        }
-        std::cout << "Program Body Locals:" << std::endl;
-        for (auto v : this->body_->symbolTable) {
-            if (this->builtinIdents.find(v.first) ==
-                    this->builtinIdents.end()) {
-                std::cout << "   " << v.first;
-                if (v.second.second) {
-                    std::cout << "\t* " << v.second.first->name;
+            std::cout << "Program Body Locals:" << std::endl;
+            for (auto v : this->body_->symbolTable) {
+                if (this->builtinIdents.find(v.first) ==
+                        this->builtinIdents.end()) {
+                    std::cout << "   " << v.first;
+                    if (v.second.second) {
+                        std::cout << "\t* " << v.second.first->name;
+                    }
+                    std::cout << std::endl;
                 }
-                std::cout << std::endl;
             }
+            std::cout << "------------Inferring Types-------------" << std::endl;
         }
-        std::cout << "------------Inferring Types-------------" << std::endl;
         inferTypes(failed);
         if (failed) {
             return true;
         }
-        for (auto c : this->classTable) {
-            ClassStruct *cs = c.second;
-            if (this->builtinTypes.find(cs->name) == this->builtinTypes.end()) {
-                std::cout << "Class " << cs->name << std::endl;
-                std::cout << "    Fields:" << std::endl;
-                for (auto v : cs->fieldTable) {
-                    if (this->builtinIdents.find(v.first) ==
-                            this->builtinIdents.end()) {
-                        std::cout << "        this." << v.first;
-                        if (v.second.first != nullptr) {
-                            if (v.second.second)
-                                std::cout << "\t* ";
-                            else
-                                std::cout << "\t  ";
-                            std::cout << v.second.first->name;
+        if (verbose) {
+            for (auto c : this->classTable) {
+                ClassStruct *cs = c.second;
+                if (this->builtinTypes.find(cs->name) ==
+                        this->builtinTypes.end()) {
+                    std::cout << "Class " << cs->name << std::endl;
+                    std::cout << "    Fields:" << std::endl;
+                    for (auto v : cs->fieldTable) {
+                        if (this->builtinIdents.find(v.first) ==
+                                this->builtinIdents.end()) {
+                            std::cout << "        this." << v.first;
+                            if (v.second.first != nullptr) {
+                                if (v.second.second)
+                                    std::cout << "\t* ";
+                                else
+                                    std::cout << "\t  ";
+                                std::cout << v.second.first->name;
+                            }
+                            std::cout << std::endl;
                         }
-                        std::cout << std::endl;
                     }
-                }
-                std::cout << "    Constructor Locals:" << std::endl;
-                for (auto v : cs->constructor->symbolTable) {
-                    if (this->builtinIdents.find(v.first) ==
-                            this->builtinIdents.end()) {
-                        std::cout << "        " << v.first;
-                        if (v.second.first != nullptr) {
-                            if (v.second.second)
-                                std::cout << "\t* ";
-                            else
-                                std::cout << "\t  ";
-                            std::cout << v.second.first->name;
-                        }
-                        std::cout << std::endl;
-                    }
-                }
-                for (auto m : cs->methodTable) {
-                    MethodStruct *ms = m.second;
-                    std::cout << "    " << ms->name << "() Locals:"
-                        << std::endl;
-                    for (auto v : ms->symbolTable) {
+                    std::cout << "    Constructor Locals:" << std::endl;
+                    for (auto v : cs->constructor->symbolTable) {
                         if (this->builtinIdents.find(v.first) ==
                                 this->builtinIdents.end()) {
                             std::cout << "        " << v.first;
@@ -944,37 +942,61 @@ namespace AST {
                             std::cout << std::endl;
                         }
                     }
+                    for (auto m : cs->methodTable) {
+                        MethodStruct *ms = m.second;
+                        std::cout << "    " << ms->name << "() Locals:"
+                            << std::endl;
+                        for (auto v : ms->symbolTable) {
+                            if (this->builtinIdents.find(v.first) ==
+                                    this->builtinIdents.end()) {
+                                std::cout << "        " << v.first;
+                                if (v.second.first != nullptr) {
+                                    if (v.second.second)
+                                        std::cout << "\t* ";
+                                    else
+                                        std::cout << "\t  ";
+                                    std::cout << v.second.first->name;
+                                }
+                                std::cout << std::endl;
+                            }
+                        }
+                    }
                 }
             }
-        }
-        std::cout << "Program Body Locals:" << std::endl;
-        for (auto v : this->body_->symbolTable) {
-            if (this->builtinIdents.find(v.first) ==
-                    this->builtinIdents.end()) {
-                std::cout << "    " << v.first;
-                if (v.second.first != nullptr) {
-                    if (v.second.second)
-                        std::cout << "\t* ";
-                    else
-                        std::cout << "\t  ";
-                    std::cout << v.second.first->name;
+            std::cout << "Program Body Locals:" << std::endl;
+            for (auto v : this->body_->symbolTable) {
+                if (this->builtinIdents.find(v.first) ==
+                        this->builtinIdents.end()) {
+                    std::cout << "    " << v.first;
+                    if (v.second.first != nullptr) {
+                        if (v.second.second)
+                            std::cout << "\t* ";
+                        else
+                            std::cout << "\t  ";
+                        std::cout << v.second.first->name;
+                    }
+                    std::cout << std::endl;
                 }
-                std::cout << std::endl;
             }
+            std::cout << "-------Checking Field Inheritance-------"
+                    << std::endl;
         }
-        std::cout << "-------Checking Field Inheritance-------" << std::endl;
         checkFieldInheritance(failed);
         if (failed) {
             return true;
         }
-        std::cout << "All fields correctly inherited" << std::endl;
-        std::cout << "------Checking Method Return Types------" << std::endl;
+        if (verbose) {
+            std::cout << "All fields correctly inherited" << std::endl;
+            std::cout << "------Checking Method Return Types------" << std::endl;
+        }
         checkReturnTypes(failed);
         if (failed) {
             return true;
         }
-        std::cout << "All methods return subtypes of their declared type"
-                << std::endl;
+        if (verbose) {
+            std::cout << "All methods return subtypes of their declared type"
+                    << std::endl;
+        }
         return failed;
     }
 
@@ -1059,7 +1081,7 @@ namespace AST {
         }
     }
     std::pair<ClassStruct*, bool> If::getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed) {
+        MethodStruct *thisMethod, bool &failed) {
         ClassStruct *currIfType = nullptr, *currElseType = nullptr;
         bool ifEnforced = false, elseEnforced = false;
         for (Statement *stmt : *if_true_stmts_) {
@@ -1153,7 +1175,7 @@ namespace AST {
         }
     }
     std::pair<ClassStruct*, bool> While::getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed) {
+        MethodStruct *thisMethod, bool &failed) {
         ClassStruct *retType = nullptr;
         for (Statement *stmt : *stmts_) {
             auto stmtType = stmt->getReturnType(thisClass, thisMethod, failed);
@@ -1281,7 +1303,12 @@ namespace AST {
                     << std::endl;
             failed = true;
         }
-
+        if (inConstructor && this->r_expr_->isThis()) {
+            std::cerr << this->getPosition() << "Error: Cannot use 'this' on "
+                    << "right-hand side of an assignment within its constructor"
+                    << std::endl;
+            failed = true;
+        }
         if (l_expr_->isField()) {
             fieldName = l_expr_->getName();
             if (l_expr_->isAssignable()) {
@@ -1476,8 +1503,9 @@ namespace AST {
             r_expr_->getVars(varCopy, fieldCopy, varTable, fieldTable,
                     inConstructor, failed);
             for (auto varName : difference(varCopy, vars)) {
-                std::cerr << this->getPosition() << "Error: Variable \"" << varName
-                        << "\" used before initialization" << std::endl;
+                std::cerr << this->getPosition() << "Error: Variable \""
+                        << varName << "\" used before initialization"
+                        << std::endl;
                 failed = true;
             }
             for (auto fieldName : difference(fieldCopy, fields)) {
@@ -1498,7 +1526,7 @@ namespace AST {
             MethodStruct *thisMethod, bool &failed) {
         if (this->returnsNone_) {
             return std::make_pair(this->builtinTypes["Nothing"], true);
-        } else{
+        } else {
             ClassStruct *retType =
                     r_expr_->getType(thisClass, thisMethod, failed);
             return std::make_pair(retType, true);
@@ -1553,7 +1581,8 @@ namespace AST {
                 } else {
                     varTable[altName] = std::make_pair(
                             this->classTable[altType], true);
-                    if (std::find(varCopy.begin(), varCopy.end(), altName) == varCopy.end()) {
+                    if (std::find(varCopy.begin(), varCopy.end(), altName) ==
+                            varCopy.end()) {
                         varCopy.push_back(altName);
                     }
                     for (Statement *s : *alt->getStatements()) {
@@ -1578,7 +1607,8 @@ namespace AST {
         ClassStruct *retType = nullptr;
         for (TypeAlt *alt : *alternatives_) {
             for (Statement *stmt : *alt->getStatements()) {
-                auto stmtType = stmt->getReturnType(thisClass, thisMethod, failed);
+                auto stmtType = stmt->getReturnType(thisClass, thisMethod,
+                        failed);
                 if (stmtType.first != nullptr) {
                     if (retType == nullptr) {
                         retType = stmtType.first;
@@ -1635,10 +1665,15 @@ namespace AST {
                     << std::endl;
             failed = true;
         }
+        if (inConstructor && obj_->isThis()) {
+            std::cerr << this->getPosition() << "Error: Cannot call a method of"
+                    << " \"this\" from within its own constructor" << std::endl;
+            failed = true;
+        }
         for (RExpr *arg : *args_) {
             if (inConstructor && arg->isThis()) {
                 std::cerr << this->getPosition() << "Error: Cannot pass 'this' "
-                        << "as argument from constructor" << std::endl;
+                        << "as an argument from its constructor" << std::endl;
                 failed = true;
             }
             fieldCopy = fields;

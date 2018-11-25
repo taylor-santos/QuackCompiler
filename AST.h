@@ -92,7 +92,7 @@ class Statement : public ASTNode {
             std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor,
             bool &failed) = 0;
     virtual std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed);
+            MethodStruct *thisMethod, bool &failed);
 };
 
 class Method : public ASTNode {
@@ -160,7 +160,7 @@ class Program : public ASTNode {
     Program(std::vector<Class*> *classes, std::vector<Statement*> *stmts):
             classes_(classes), stmts_(stmts) {}
     virtual void json(std::ostream &out, unsigned int indent = 0);
-    bool typeCheck();
+    bool typeCheck(bool verbose);
 };
 
 class TypeAlt : public ASTNode {
@@ -212,7 +212,7 @@ class If : public Statement {
     void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &failed) override;
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed) override;
+            MethodStruct *thisMethod, bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
@@ -229,7 +229,7 @@ class While : public Statement {
             std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor,
             bool &failed) override;
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed) override;
+            MethodStruct *thisMethod, bool &failed) override;
     void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &failed) override;
 };
@@ -291,7 +291,7 @@ class Return : public Statement {
     void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &failed) override;
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed) override;
+            MethodStruct *thisMethod, bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0);
 };
 
@@ -309,9 +309,8 @@ class Typecase : public Statement {
     void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &failed) override;
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
-	    MethodStruct *thisMethod, bool &failed) override;
+            MethodStruct *thisMethod, bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0);
-    
 };
 
 class IntLit : public RExpr {
