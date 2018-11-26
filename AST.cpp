@@ -222,6 +222,14 @@ namespace AST {
                 std::vector<ClassStruct*>(1, Int));
         this->addBuiltinMethod(Int, "DIVIDE", Int,
                 std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int, "ATLEAST", Boolean,
+                std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int, "ATMOST", Boolean,
+                std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int, "LESS", Boolean,
+                std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int, "MORE", Boolean,
+                std::vector<ClassStruct*>(1, Int));
     }
     void Program::buildClassMap(bool &failed) {
         std::string name, super;
