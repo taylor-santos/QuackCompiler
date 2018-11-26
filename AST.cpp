@@ -210,8 +210,24 @@ namespace AST {
                 std::vector<ClassStruct*>());
         this->addBuiltinMethod(Obj, "EQUALS", Boolean,
                 std::vector<ClassStruct*>(1, Obj));
+        this->addBuiltinMethod(Nothing, "STR", String,
+                std::vector<ClassStruct*>());
+        this->addBuiltinMethod(String, "STR", String,
+                std::vector<ClassStruct*>());
         this->addBuiltinMethod(String, "PLUS", String,
                 std::vector<ClassStruct*>(1, String));
+        this->addBuiltinMethod(String, "EQUALS", Boolean,
+                std::vector<ClassStruct*>(1, Obj));
+        this->addBuiltinMethod(String, "ATLEAST", Boolean,
+                std::vector<ClassStruct*>(1, String));
+        this->addBuiltinMethod(String, "ATMOST", Boolean,
+                std::vector<ClassStruct*>(1, String));
+        this->addBuiltinMethod(String, "LESS", Boolean,
+                std::vector<ClassStruct*>(1, String));
+        this->addBuiltinMethod(String, "MORE", Boolean,
+                std::vector<ClassStruct*>(1, String));
+        this->addBuiltinMethod(Int, "STR", String,
+                std::vector<ClassStruct*>());
         this->addBuiltinMethod(Int, "PLUS",   Int,
                 std::vector<ClassStruct*>(1, Int));
         this->addBuiltinMethod(Int, "MINUS",  Int,
@@ -222,6 +238,8 @@ namespace AST {
                 std::vector<ClassStruct*>(1, Int));
         this->addBuiltinMethod(Int, "DIVIDE", Int,
                 std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Int, "EQUALS", Boolean,
+                std::vector<ClassStruct*>(1, Obj));
         this->addBuiltinMethod(Int, "ATLEAST", Boolean,
                 std::vector<ClassStruct*>(1, Int));
         this->addBuiltinMethod(Int, "ATMOST", Boolean,
@@ -230,6 +248,9 @@ namespace AST {
                 std::vector<ClassStruct*>(1, Int));
         this->addBuiltinMethod(Int, "MORE", Boolean,
                 std::vector<ClassStruct*>(1, Int));
+        this->addBuiltinMethod(Boolean, "STR", String,
+                std::vector<ClassStruct*>());
+        
     }
     void Program::buildClassMap(bool &failed) {
         std::string name, super;
@@ -438,10 +459,13 @@ namespace AST {
         std::map<ClassStruct*, bool> checked;
         std::stack<ClassStruct*> classStack;
         ClassStruct *curr;
-        MethodStruct *ms, *super_ms;
+        MethodStruct *ms;
         size_t i;
         for (auto it : this->classTable) {
             if (it.second->super == nullptr) {
+                for (auto mthdKeyValue : it.second->methodTable) {
+                    it.second->methodOrder.push_back(mthdKeyValue.second);
+                }
                 checked[it.second] = true;
             } else {
                 checked[it.second] = false;
@@ -456,11 +480,10 @@ namespace AST {
             while (!classStack.empty()) {
                 curr = classStack.top();
                 classStack.pop();
-                for (auto mthdKeyValue : curr->super->methodTable) {
-                    if (curr->methodTable.find(mthdKeyValue.first) !=
+                for (MethodStruct *super_ms : curr->super->methodOrder) {
+                    if (curr->methodTable.find(super_ms->name) !=
                             curr->methodTable.end()) {
-                        ms = curr->methodTable[mthdKeyValue.first];
-                        super_ms = mthdKeyValue.second;
+                        ms = curr->methodTable[super_ms->name];
                         if (ms->type->LCA[super_ms->type] != super_ms->type) {
                             std::cerr << "Error: Inherited method \""
                                     << curr->name << "." << ms->name
@@ -489,10 +512,18 @@ namespace AST {
                                 }
                             }
                         }
-
+                        curr->methodOrder.push_back(
+                                curr->methodTable[super_ms->name]);
                     } else {
-                        curr->methodTable[mthdKeyValue.first] =
-                                mthdKeyValue.second;
+                        curr->methodTable[super_ms->name] = super_ms;
+                        curr->methodOrder.push_back(super_ms);
+                    }
+                }
+                for (auto mthdKeyValue : curr->methodTable) {
+                    if (std::find(curr->methodOrder.begin(),
+                            curr->methodOrder.end(), mthdKeyValue.second) ==
+                            curr->methodOrder.end()) {
+                        curr->methodOrder.push_back(mthdKeyValue.second);
                     }
                 }
                 checked[curr] = true;
@@ -863,8 +894,7 @@ namespace AST {
         if (verbose) {
             for (auto it : this->classTable) {
                 ClassStruct *cs = it.second;
-                for (auto it2 : cs->methodTable) {
-                    MethodStruct *ms = it2.second;
+                for (auto ms : cs->methodOrder) {
                     std::cout << cs->name << "." << ms->name << "(";
                     std::string sep = "";
                     for (ClassStruct *arg : ms->argTypes) {
@@ -1033,6 +1063,63 @@ namespace AST {
                     << std::endl;
         }
         return failed;
+    }
+    void Program::genCode(std::ostream &file) {
+        file << "/*" << std::endl << "   Squawked with love, by ducks"
+                << std::endl << "*/" << std::endl << std:: endl;
+        file << "#include \"Builtins.h\"" << std::endl << std::endl;
+        for (Class *c : *this->classes_) {
+            ClassStruct *cs = c->getClassStruct();
+            file << "typedef struct class_" << cs->name << "_struct *class_"
+                    << cs->name << ";" << std::endl;
+            file << "typedef struct obj_" << cs->name << "_struct *obj_"
+                    << cs->name << ";" << std::endl << std::endl;
+        }
+        for (Class *c : *this->classes_) {
+            ClassStruct *cs = c->getClassStruct();
+            file << "struct class_" << cs->name << "_struct {" << std::endl;
+            file << "\tclass_" << cs->super->name << "\tsuper;" << std::endl;
+            for (MethodStruct *ms : cs->methodOrder) {
+                file << "\tobj_" << ms->type->name << "\t(*" << ms->name
+                        << ") (" << "obj_" << cs->name;
+                for (ClassStruct *argType : ms->argTypes) {
+                    file << ", obj_" << argType->name;
+                }
+                file << ");" << std::endl;
+            }
+            file << "};" << std::endl;
+            file << "struct obj_" << cs->name << "_struct {" << std::endl;
+            file << "\tclass_" << cs->name << "\tclass;" << std::endl;
+            for (auto fieldKeyValue : cs->fieldTable) {
+                std::string fieldName = fieldKeyValue.first;
+                std::string fieldType = fieldKeyValue.second.first->name;
+                file << "\tobj_" << fieldType << "\tfield_" << fieldName << ";"
+                        << std::endl;
+            }
+            file << "};" << std::endl << std::endl;
+        }
+        for (Class *c : *this->classes_) {
+            ClassStruct *cs = c->getClassStruct();
+            file << "// " << cs->name << " Methods" << std::endl;
+            file << "obj_" << cs->name << " new_" << cs->name << "() {"
+                    << std::endl << "}" << std::endl;
+            for (Method *m : *c->getMethods()) {
+                MethodStruct *ms = m->getMethodStruct();
+                file << "obj_" << ms->type->name << " " << cs->name
+                        << "_method_" << ms->name << "(obj_" << cs->name <<
+                        " this";
+                for (TypedArg* arg : *m->getArgs()) {
+                    file << ", obj_" << arg->getType() << " arg_"
+                            << arg->getName();
+                }
+                file << ") {" << std::endl << "}"
+                        << std::endl;
+            }
+            file << std::endl;
+        }
+        file << "int main() {" << std::endl;
+        file << "}" << std::endl;
+        
     }
 
 /* TypeAlt */

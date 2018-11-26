@@ -26,6 +26,11 @@ class Driver {
         }
         return true;
     }
+    void genCode(std::ostream &file) {
+	if (this->parsed && this->typeChecked) {
+	    this->root->genCode(file);
+	}
+    }
     void json(std::ostream &out){
         root->json(out);
     }

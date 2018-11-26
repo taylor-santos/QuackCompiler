@@ -26,6 +26,7 @@ struct ClassStruct {
     std::map<ClassStruct*, ClassStruct*> LCA;
     struct MethodStruct *constructor;
     std::map<std::string, struct MethodStruct*> methodTable;
+    std::vector<MethodStruct*> methodOrder;
     std::map<std::string, std::pair<ClassStruct*, bool>> fieldTable;
 };
 struct MethodStruct {
@@ -161,6 +162,7 @@ class Program : public ASTNode {
             classes_(classes), stmts_(stmts) {}
     virtual void json(std::ostream &out, unsigned int indent = 0) override;
     bool typeCheck(bool verbose);
+    void genCode(std::ostream &file);
 };
 
 class TypeAlt : public ASTNode {
