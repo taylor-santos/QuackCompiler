@@ -11,15 +11,16 @@
 class Driver {
  public:
     explicit Driver(reflex::Input in) : lexer(in), parser(new yy::parser(lexer,
-	    &root)), root(nullptr), parsed(false), typeChecked(false) {}
+            &root)), root(nullptr), parsed(false), typeChecked(false) {}
     ~Driver() { delete parser; }
     bool parse() {
         int result = parser->parse();
         this->parsed = result == 0 && report::ok();
-	return this->parsed;
+        return this->parsed;
     }
     bool typeCheck(bool verbose) {
-        if (root->typeCheck(verbose)) {
+        this->typeChecked = !root->typeCheck(verbose);
+	if (!this->typeChecked) {
             std::cerr << "Type check failed" << std::endl;
             return false;
         }
