@@ -1,15 +1,32 @@
 #include "parser.h"
+#include <unistd.h>
+#include <fstream>
 
 int main(int argc, char *argv[]) {
-    Driver driver(std::cin);
+    int opt;
     bool verbose = false;
-    if (argc >= 2) {
-        for (int i=1; i<argc; i++) {
-            if (strcmp(argv[i], "-v") == 0) {
-                verbose = true;
-            }
+    char *outName = nullptr;
+    std::ifstream inputFile;
+    std::istream *input;
+    
+    while ((opt = getopt(argc, argv, "vo:")) != -1) {
+        switch (opt) {
+         case 'v':
+            verbose = true;
+            break;
+         case 'o':
+             outName = strdup(optarg);
+             break;
         }
     }
+    if (optind < argc) {
+        inputFile.open(argv[optind]);
+        input = &inputFile;
+    } else {
+        input = &std::cin;
+    }
+    
+    Driver driver(*input);
     bool parse_result = driver.parse();
     if (parse_result) {
         if (verbose) {

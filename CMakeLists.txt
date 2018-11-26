@@ -33,9 +33,9 @@ include_directories(
 )
 
 
-add_executable(parser
+add_executable(qcc
         quack.tab.cxx lex.yy.cpp lex.yy.h
 
         main.cpp parser.h AST.h AST.cpp Messages.h Messages.cpp CodegenContext.cpp CodegenContext.h)
 
-target_link_libraries(parser ${REFLEX_LIB})
+target_link_libraries(qcc ${REFLEX_LIB})
