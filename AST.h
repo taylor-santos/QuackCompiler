@@ -77,7 +77,7 @@ class TypedArg : public ASTNode {
     std::string type_;
  public:
     TypedArg(std::string name, std::string type): name_(name), type_(type) {}
-    virtual void json(std::ostream &out, unsigned int indent = 0);
+    virtual void json(std::ostream &out, unsigned int indent = 0) override;
     std::string getType() const { return type_; }
     std::string getName() const { return name_; }
 };
@@ -109,7 +109,7 @@ class Method : public ASTNode {
     Method(std::string name, std::vector<TypedArg*> *args, std::string type,
             std::vector<Statement*> *stmts): name_(name), args_(args),
             isTyped_(true), type_(type), stmts_(stmts) {}
-    virtual void json(std::ostream &out, unsigned int indent = 0);
+    virtual void json(std::ostream &out, unsigned int indent = 0) override;
     std::string getType() const;
     std::vector<TypedArg*> *getArgs() const { return args_; }
     std::string getName() const { return name_; }
@@ -131,7 +131,7 @@ class Class : public ASTNode {
             std::vector<Statement*> *stmts, std::vector<Method*> *mthds):
             name_(name), args_(args), extends_(extends), stmts_(stmts),
             mthds_(mthds) {}
-    virtual void json(std::ostream &out, unsigned int indent = 0);
+    virtual void json(std::ostream &out, unsigned int indent = 0) override;
     std::string getExtends() const { return extends_; }
     std::string getName() const { return name_; }
     ClassStruct* getClassStruct() const { return this->classStruct_; }
@@ -159,7 +159,7 @@ class Program : public ASTNode {
  public:
     Program(std::vector<Class*> *classes, std::vector<Statement*> *stmts):
             classes_(classes), stmts_(stmts) {}
-    virtual void json(std::ostream &out, unsigned int indent = 0);
+    virtual void json(std::ostream &out, unsigned int indent = 0) override;
     bool typeCheck(bool verbose);
 };
 
@@ -175,7 +175,7 @@ class TypeAlt : public ASTNode {
     std::vector<Statement*>* getStatements() const {
         return stmts_;
     }
-    virtual void json(std::ostream &out, unsigned int indent = 0);
+    virtual void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class RExpr : public Statement {
@@ -267,7 +267,7 @@ class Assignment : public Statement {
             isTyped_(true), type_(type), r_expr_(r_expr) {}
     Assignment(LExpr *l_expr, RExpr *r_expr): l_expr_(l_expr), isTyped_(false),
             type_(""), r_expr_(r_expr) {}
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
     void getVars(std::vector<std::string> &vars,
             std::vector<std::string> &fields, std::map<std::string,
             std::pair<ClassStruct*, bool>> &varTable, std::map<std::string,
@@ -292,7 +292,7 @@ class Return : public Statement {
             bool &changed, bool &failed) override;
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed) override;
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class Typecase : public Statement {
@@ -310,7 +310,7 @@ class Typecase : public Statement {
             bool &changed, bool &failed) override;
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed) override;
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class IntLit : public RExpr {
@@ -319,7 +319,7 @@ class IntLit : public RExpr {
     explicit IntLit(unsigned int val): val_(val) {}
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override { return this->builtinTypes["Int"]; }
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class StrLit : public RExpr {
@@ -328,7 +328,7 @@ class StrLit : public RExpr {
     explicit StrLit(std::string text): text_(text) {}
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) { return this->builtinTypes["String"]; }
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class Call : public RExpr {
@@ -345,7 +345,7 @@ class Call : public RExpr {
             bool &failed) override;
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class Constructor : public RExpr {
@@ -361,7 +361,7 @@ class Constructor : public RExpr {
             bool &failed) override;
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class And : public RExpr {
@@ -376,7 +376,7 @@ class And : public RExpr {
             bool &failed) override;
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class Or : public RExpr {
@@ -391,7 +391,7 @@ class Or : public RExpr {
             bool &failed) override;
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
 class Not : public RExpr {
@@ -405,7 +405,7 @@ class Not : public RExpr {
             bool &failed) override;
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
-    void json(std::ostream &out, unsigned int indent = 0);
+    void json(std::ostream &out, unsigned int indent = 0) override;
 };
 }  // namespace AST
 #endif  // AST_H_
