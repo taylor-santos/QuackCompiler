@@ -526,12 +526,30 @@ namespace AST {
                             << symbolKeyValue.first << "\"" << std::endl;
                     failed = true;
                 }
+                if (cs->methodTable.find(symbolKeyValue.first) !=
+                        cs->methodTable.end()) {
+                    std::cerr << "Error: Local variable \""
+                            << symbolKeyValue.first << "\" in \""
+                            << cs->name << "\" constructor cannot share the "
+                            << "same identifier as method \"" << cs->name
+                            << "." << symbolKeyValue.first << "()\""
+                            << std::endl;
+                    failed = true;
+                }
             }
             for (std::string field : fields) {
                 if (this->classTable.find(field) != this->classTable.end()) {
                     std::cerr << "Error: Field \"" << cs->name << "."
                             << field << "\" cannot share the same identifier "
                             << "as class \"" << field << "\"" << std::endl;
+                    failed = true;
+                }
+                if (cs->methodTable.find(field) !=
+                        cs->methodTable.end()) {
+                    std::cerr << "Error: Field \"" << cs->name << "." << field
+                            << "\" in \"" << cs->name << "\" cannot share the "
+                            << "same identifier as method \"" << cs->name
+                            << "." << field << "()\"" << std::endl;
                     failed = true;
                 }
                 cs->fieldTable[field] = fieldTable[field];
@@ -561,6 +579,16 @@ namespace AST {
                                 << "cannot share the same identifier as class "
                                 << "\"" << symbolKeyValue.first << "\""
                                 << std::endl;
+                        failed = true;
+                    }
+                    if (cs->methodTable.find(symbolKeyValue.first) !=
+                            cs->methodTable.end()) {
+                        std::cerr << "Error: Local variable \""
+                                << symbolKeyValue.first << " in " << cs->name
+                                << "." << ms->name << "()\" cannot "
+                                << "share the same identifier as method \""
+                                << cs->name << "." << symbolKeyValue.first
+                                << "()\"" << std::endl;
                         failed = true;
                     }
                 }
@@ -1325,11 +1353,14 @@ namespace AST {
                             fieldTable[fieldName] = std::make_pair(
                                     this->classTable[this->type_], true);
                         } else if (fieldTable[fieldName].second) {
-                            std::cerr << this->getPosition() << "Error: Field "
-                                    << "\"this." << fieldName << "\" cannot "
-                                    << "have more than one explicit type "
-                                    << "definition" << std::endl;
-                            failed = true;
+                            if (fieldTable[fieldName].first !=
+                                    this->classTable[this->type_]) {
+                                std::cerr << this->getPosition() << "Error: Field "
+                                        << "\"this." << fieldName << "\" cannot "
+                                        << "have more than one explicit type "
+                                        << "definition" << std::endl;
+                                failed = true;
+                            }
                         } else {
                             fieldTable[fieldName] = std::make_pair(
                                     this->classTable[this->type_], true);
@@ -1366,11 +1397,18 @@ namespace AST {
                             varTable[varName] = std::make_pair(
                                     this->classTable[this->type_], true);
                         } else if (varTable[varName].second) {
-                            std::cerr << this->getPosition() << "Error: "
-                            << "Variable \"" << varName << "\" cannot have "
-                            << "more than one explicit type definition"
-                            << std::endl;
-                            failed = true;
+                            if (varTable[varName].first !=
+                                    this->classTable[this->type_]) {
+                                std::cerr << this->getPosition() << "Error: "
+                                        << "Variable \"" << varName << "\" "
+                                        << "given contradictory explicit type "
+                                        << "definition \"" << this->type_ 
+                                        << "\". It was already explicitly "
+                                        << "defined to be an instance of \""
+                                        << varTable[varName].first->name << "\""
+                                        << std::endl;
+                                failed = true;
+                            }
                         } else {
                             varTable[varName] = std::make_pair(
                                     this->classTable[this->type_], true);
