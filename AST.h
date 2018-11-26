@@ -327,7 +327,7 @@ class StrLit : public RExpr {
  public:
     explicit StrLit(std::string text): text_(text) {}
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
-            bool &failed) { return this->builtinTypes["String"]; }
+            bool &failed) override { return this->builtinTypes["String"]; }
     void json(std::ostream &out, unsigned int indent = 0) override;
 };
 
