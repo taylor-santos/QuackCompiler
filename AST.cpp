@@ -701,7 +701,6 @@ namespace AST {
                         }
                         if (retType.second) {
                             absoluteReturn = true;
-                            break;
                         }
                     }
                 }
@@ -1094,7 +1093,6 @@ namespace AST {
                 }
                 if (retType.second) {
                     ifEnforced = true;
-                    break;
                 }
             }
         }
@@ -1108,7 +1106,6 @@ namespace AST {
                 }
                 if (retType.second) {
                     elseEnforced = true;
-                    break;
                 }
             }
         }
@@ -1184,9 +1181,6 @@ namespace AST {
                     retType = stmtType.first;
                 } else {
                     retType = retType->LCA[stmtType.first];
-                }
-                if (stmtType.second) {
-                    break;
                 }
             }
         }
@@ -1614,9 +1608,6 @@ namespace AST {
                         retType = stmtType.first;
                     } else {
                         retType = retType->LCA[stmtType.first];
-                    }
-                    if (stmtType.second) {
-                        break;
                     }
                 }
             }
