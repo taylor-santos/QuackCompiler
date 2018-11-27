@@ -66,7 +66,7 @@ struct class_Obj_struct {
   obj_Obj (*PRINT) (obj_Obj);
   obj_String (*STR) (obj_Obj);
 }; 
-
+extern struct class_Obj_struct the_class_Obj_struct;
 extern class_Obj const the_class_Obj; /* Initialized in Builtins.c */
 
 /* ================
