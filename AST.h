@@ -86,6 +86,7 @@ class TypedArg : public ASTNode {
 class Statement : public ASTNode {
  protected:
     static unsigned int tempVarID;
+    static unsigned int labelID;
  public:
     virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &faile5d) = 0;
@@ -98,7 +99,7 @@ class Statement : public ASTNode {
             MethodStruct *thisMethod, bool &failed);
     virtual void generateCode(std::ostream &file, int indent,
             ClassStruct *thisClass, MethodStruct *thisMethod) {
-	std::cout << "Error: unfinished method!" << std::endl; 
+	std::cout << "Error: unfinished Statement!" << std::endl; 
     }
 };
 
@@ -208,6 +209,9 @@ class RExpr : public Statement {
 	std::cout << "Unfinished RExpr!" << std::endl;
 	return "";
     }
+    virtual void generateBranchCode(std::ostream &file, int indent,
+	    ClassStruct *thisClass, MethodStruct *thisMethod,
+	    std::string trueLabel, std::string falseLabel) {}
 };
 
 class If : public Statement {
@@ -232,6 +236,8 @@ class If : public Statement {
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    void generateCode(std::ostream &file, int indent, ClassStruct *thisClass,
+	    MethodStruct *thisMethod) override;
 };
 
 class While : public Statement {
@@ -275,6 +281,9 @@ class LExpr : public RExpr {
             bool &failed) override;
     std::string generateRExprCode(std::ostream &file, int indent,
             ClassStruct *thisClass, MethodStruct *thisMethod) override;
+    void generateBranchCode(std::ostream &file, int indent,
+	    ClassStruct *thisClass, MethodStruct *thisMethod,
+	    std::string trueLabel, std::string falseLabel) override;
 };
 
 class Assignment : public Statement {

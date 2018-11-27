@@ -177,7 +177,7 @@ class_String the_class_String = &the_class_String_struct;
  */
 obj_String str_literal(char *s) {
   obj_String str = new_String(); 
-  str->text = strdut(s);
+  str->text = strdup(s);
   return str;
 }
 
