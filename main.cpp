@@ -5,7 +5,7 @@
 int main(int argc, char *argv[]) {
     int opt;
     bool verbose = false;
-    char *exeName = nullptr;
+    std::string outName = "";
     std::ifstream inputFile;
     std::istream *input;
     std::ofstream outputFile;
@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
             verbose = true;
             break;
          case 'o':
-            exeName = strdup(optarg);
+            outName = std::string(optarg);
             break;
         }
     }
@@ -33,8 +33,10 @@ int main(int argc, char *argv[]) {
         int slashIndex = inFilename.find_last_of("/");
         slashIndex = slashIndex == 0 ? 0 : slashIndex + 1;
         int len = inFilename.size() - slashIndex - 3;
-        std::string outFilename(inFilename.substr(slashIndex, len) + ".c");
-        outputFile.open(outFilename);
+        if (outName == "") {
+            outName = inFilename.substr(slashIndex, len) + ".c";
+        }
+        outputFile.open(outName);
         output = &outputFile;
     } else {
         input = &std::cin;

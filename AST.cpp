@@ -1606,6 +1606,8 @@ namespace AST {
             file << "obj_" << field_type->name << " " << this_var << " = " 
                     << obj_var << "->field_" << this->name_ << ";" << std::endl;
             return this_var;
+        } else if (this->name_ == "this") {
+            return "this";
         } else if (this->builtinIdents.find(this->name_) !=
                 this->builtinIdents.end()) {
             return "lit_" + this->name_;
@@ -1898,8 +1900,6 @@ namespace AST {
     }
     void Return::generateCode(std::ostream& file, int indent,
             ClassStruct* thisClass, MethodStruct* thisMethod) {
-        
-        
         if (returnsNone_) {
             for (int i = 0; i < indent; i++) { file << "\t"; }
             file << "return (obj_" << thisMethod->type->name << ")lit_none;"
@@ -2299,17 +2299,22 @@ namespace AST {
             ClassStruct *thisClass, MethodStruct *thisMethod) {
         ClassStruct *type = this->classTable[this->name_];
         std::string tmpVar = "temp" + std::to_string(this->tempVarID++);
-        std::vector<std::string> argVars;
-        for (RExpr *arg : *this->args_) {
-            argVars.push_back(arg->generateRExprCode(file, indent, thisClass,
-                    thisMethod));
+        std::vector<std::pair<std::string, std::string>> argVars;
+        std::vector<ClassStruct*> argTypes =
+                this->classTable[this->name_]->constructor->argTypes;
+        for (size_t i = 0; i < this->args_->size(); i++) {
+            std::string argName = this->args_->at(i)->generateRExprCode(file,
+                    indent, thisClass, thisMethod);
+            std::string argType = argTypes.at(i)->name;
+            argVars.push_back(std::make_pair(argType, argName));
         }
         for (int i = 0; i < indent; i++) { file << "\t"; }
         file << "obj_" << type->name << " " << tmpVar << " = new_" << type->name
                 << "(";
         std::string sep = "";
-        for (std::string arg: argVars) {
-            file << sep << arg;
+        for (size_t i = 0; i < argVars.size(); i++) {
+            file << sep << "(obj_" << argVars[i].first << ")"
+                    << argVars[i].second;
             sep = ", ";
         }
         file << ");" << std::endl;
