@@ -1081,7 +1081,7 @@ namespace AST {
             file << "\tclass_" << cs->super->name << "\tsuper;" << std::endl;
             for (MethodStruct *ms : cs->methodOrder) {
                 file << "\tobj_" << ms->type->name << "\t(*" << ms->name
-                        << ") (" << "obj_" << cs->name;
+                        << ") (" << "obj_" << ms->clazz->name;
                 for (ClassStruct *argType : ms->argTypes) {
                     file << ", obj_" << argType->name;
                 }
@@ -1117,6 +1117,41 @@ namespace AST {
             }
             file << std::endl;
         }
+        std::stack<ClassStruct*> S;
+        S.push(this->builtinTypes["Obj"]);
+        while (!S.empty()) {
+            ClassStruct *curr = S.top();
+            S.pop();
+            for (ClassStruct *child : curr->children) {
+                S.push(child);
+            }
+            if (this->builtinTypes.find(curr->name) == this->builtinTypes.end()) {
+                file << "struct class_" << curr->name << "_struct the_class_"
+                        << curr->name << "_struct = {" << std::endl;
+                if (curr->super == nullptr) {
+                    file << "\t.super = 0";
+                } else {
+                    file << "\t.super = &the_class_" << curr->super->name
+                            << "_struct";
+                }
+                for (MethodStruct *ms : curr->methodOrder) {
+                    file << "," << std::endl << "\t." << ms->name << " = "
+                            << ms->clazz->name << "_method_" << ms->name;
+                }
+                file << std::endl << "};" << std::endl;
+                file << "const class_" << curr->name << " the_class_" << curr->name <<
+                        " = &the_class_" << curr->name << "_struct;" << std::endl;
+            }
+        }
+        /*
+        for (Class *c : *this->classes_) {
+            ClassStruct *cs = c->getClassStruct();
+            file << "struct class_" << cs->name << "_struct the_class_"
+                    << cs->name << "_struct;" << std::endl;
+            file << "class_" << cs->name << " the_class_" << cs->name << " = "
+                    << "&the_class_" << cs->name << "_struct;" << std::endl;
+        }
+         */
         file << "int main() {" << std::endl;
         file << "}" << std::endl;
         
