@@ -84,9 +84,11 @@ class TypedArg : public ASTNode {
 };
 
 class Statement : public ASTNode {
+ protected:
+    static unsigned int tempVarID;
  public:
     virtual void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
-            bool &changed, bool &failed) = 0;
+            bool &changed, bool &faile5d) = 0;
     virtual void getVars(std::vector<std::string> &vars,
             std::vector<std::string> &fields, std::map<std::string,
             std::pair<ClassStruct*, bool>> &varTable, std::map<std::string,
@@ -94,7 +96,10 @@ class Statement : public ASTNode {
             bool &failed) = 0;
     virtual std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed);
-    
+    virtual void generateCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+	std::cout << "Error: unfinished method!" << std::endl; 
+    }
 };
 
 class Method : public ASTNode {
@@ -114,6 +119,7 @@ class Method : public ASTNode {
     virtual void json(std::ostream &out, unsigned int indent = 0) override;
     std::string getType() const;
     std::vector<TypedArg*> *getArgs() const { return args_; }
+    std::vector<std::string> getArgNames() const;
     std::string getName() const { return name_; }
     std::vector<Statement*> *getStatements() const { return stmts_; }
     MethodStruct *getMethodStruct() const { return methodStruct_; }
@@ -140,6 +146,7 @@ class Class : public ASTNode {
     std::vector<Method*>* getMethods() const { return mthds_; }
     std::vector<Statement*>* getStatements() const { return stmts_; }
     std::vector<TypedArg*>* getArgs() const { return args_; }
+    std::vector<std::string> getArgNames() const;
     void setClassStruct(ClassStruct* classStruct) {
             this->classStruct_ = classStruct; }
 };
@@ -193,6 +200,14 @@ class RExpr : public Statement {
         std::pair<ClassStruct*, bool>> &varTable, std::map<std::string,
         std::pair<ClassStruct*, bool>> &fieldTable, bool inConstructor,
         bool &failed) override {}
+    void generateCode(std::ostream &file, int indent, ClassStruct *thisClass,
+	    MethodStruct *thisMethod) final { this->generateRExprCode(file,
+		    indent, thisClass, thisMethod); }
+    virtual std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+	std::cout << "Unfinished RExpr!" << std::endl;
+	return "";
+    }
 };
 
 class If : public Statement {
@@ -258,6 +273,8 @@ class LExpr : public RExpr {
             bool &failed) override;
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class Assignment : public Statement {
@@ -278,6 +295,9 @@ class Assignment : public Statement {
             bool &failed) override;
     void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &failed) override;
+    void generateCode(std::ostream &file, int indent, ClassStruct *thisClass,
+	    MethodStruct *thisMethod) override;
+    
 };
 
 class Return : public Statement {
@@ -323,6 +343,8 @@ class IntLit : public RExpr {
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override { return this->builtinTypes["Int"]; }
     void json(std::ostream &out, unsigned int indent = 0) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class StrLit : public RExpr {
@@ -332,6 +354,8 @@ class StrLit : public RExpr {
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override { return this->builtinTypes["String"]; }
     void json(std::ostream &out, unsigned int indent = 0) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class Call : public RExpr {
@@ -349,6 +373,8 @@ class Call : public RExpr {
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class Constructor : public RExpr {
@@ -365,6 +391,8 @@ class Constructor : public RExpr {
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class And : public RExpr {

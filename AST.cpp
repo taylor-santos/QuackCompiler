@@ -52,6 +52,7 @@ namespace AST {
     std::map<std::string, ClassStruct*> ASTNode::classTable;
     std::map<std::string, ClassStruct*> ASTNode::builtinTypes;
     std::map<std::string, ClassStruct*> ASTNode::builtinIdents;
+    unsigned int Statement::tempVarID = 0;
     std::string ASTNode::getPosition() const {
         return std::to_string(first_line) + ":" +
                 std::to_string(first_col) + ": ";
@@ -176,6 +177,13 @@ namespace AST {
             return "Nothing";
         }
     }
+    std::vector<std::string> Method::getArgNames() const {
+        std::vector<std::string> vec(this->args_->size());
+        for (size_t i = 0; i < this->args_->size(); i++) {
+            vec[i] = this->args_->at(i)->getName();
+        }
+        return vec;
+    }
 
 /* Class */
     void Class::json(std::ostream &out, unsigned int indent) {
@@ -186,6 +194,13 @@ namespace AST {
         this->json_list<Statement*>(out, indent, "stmts_", *this->stmts_);
         this->json_list<Method*>(out, indent, "mthds_", *this->mthds_);
         this->json_close(out, indent);
+    }
+    std::vector<std::string> Class::getArgNames() const {
+        std::vector<std::string> vec(this->args_->size());
+        for (size_t i = 0; i < this->args_->size(); i++) {
+            vec[i] = this->args_->at(i)->getName();
+        }
+        return vec;
     }
 
 /* Program */
@@ -1102,17 +1117,47 @@ namespace AST {
             ClassStruct *cs = c->getClassStruct();
             file << "// " << cs->name << " Methods" << std::endl;
             file << "obj_" << cs->name << " new_" << cs->name << "() {"
-                    << std::endl << "}" << std::endl;
+                    << std::endl;
+            std::vector<std::string> argNames = c->getArgNames();
+            for (auto localKeyValue : cs->constructor->symbolTable) {
+                if (this->builtinIdents.find(localKeyValue.first) ==
+                        this->builtinIdents.end() && localKeyValue.first !=
+                        "this" && std::find(argNames.begin(), argNames.end(),
+                        localKeyValue.first) == argNames.end()) {
+                    file << "\tobj_" << localKeyValue.second.first->name
+                            << " local_" << localKeyValue.first << ";"
+                            << std::endl;
+                }
+            }
+            file << std::endl;
+            file << "}" << std::endl;
             for (Method *m : *c->getMethods()) {
                 MethodStruct *ms = m->getMethodStruct();
+                argNames = m->getArgNames();
                 file << "obj_" << ms->type->name << " " << cs->name
                         << "_method_" << ms->name << "(obj_" << cs->name <<
                         " this";
                 for (TypedArg* arg : *m->getArgs()) {
-                    file << ", obj_" << arg->getType() << " arg_"
+                    file << ", obj_" << arg->getType() << " local_"
                             << arg->getName();
                 }
-                file << ") {" << std::endl << "}"
+                file << ") {" << std::endl;
+                for (auto localKeyValue : ms->symbolTable) {
+                    if (this->builtinIdents.find(localKeyValue.first) ==
+                            this->builtinIdents.end() && localKeyValue.first !=
+                            "this" && std::find(argNames.begin(),
+                            argNames.end(), localKeyValue.first) ==
+                            argNames.end()) {
+                        file << "\tobj_" << localKeyValue.second.first->name
+                                << " local_" << localKeyValue.first << ";"
+                                << std::endl;
+                    }
+                }
+                file << std::endl;
+                for (Statement *s : *m->getStatements()) {
+                    s->generateCode(file, 1, cs, ms);
+                }
+                file << "}"
                         << std::endl;
             }
             file << std::endl;
@@ -1125,25 +1170,35 @@ namespace AST {
             for (ClassStruct *child : curr->children) {
                 S.push(child);
             }
-            if (this->builtinTypes.find(curr->name) == this->builtinTypes.end()) {
+            if (this->builtinTypes.find(curr->name) ==
+                    this->builtinTypes.end()) {
                 file << "struct class_" << curr->name << "_struct the_class_"
                         << curr->name << "_struct = {" << std::endl;
-                if (curr->super == nullptr) {
-                    file << "\t.super = 0";
-                } else {
-                    file << "\t.super = &the_class_" << curr->super->name
-                            << "_struct";
-                }
+                file << "\t.super = &the_class_" << curr->super->name
+                        << "_struct";
                 for (MethodStruct *ms : curr->methodOrder) {
                     file << "," << std::endl << "\t." << ms->name << " = "
                             << ms->clazz->name << "_method_" << ms->name;
                 }
                 file << std::endl << "};" << std::endl;
-                file << "const class_" << curr->name << " the_class_" << curr->name <<
-                        " = &the_class_" << curr->name << "_struct;" << std::endl;
+                file << "const class_" << curr->name << " the_class_"
+                        << curr->name << " = &the_class_" << curr->name
+                        << "_struct;" << std::endl;
             }
         }
         file << "int main() {" << std::endl;
+        for (auto localKeyValue : this->body_->symbolTable) {
+            if (this->builtinIdents.find(localKeyValue.first) ==
+                    this->builtinIdents.end()) {
+                file << "\tobj_" << localKeyValue.second.first->name
+                        << " local_" << localKeyValue.first << ";"
+                        << std::endl;
+            }
+        }
+        file << std::endl;
+        for (Statement *s : *this->stmts_) {
+            s->generateCode(file, 1, nullptr, this->body_);
+        }
         file << "}" << std::endl;
         
     }
@@ -1416,6 +1471,25 @@ namespace AST {
         }
         return nullptr;
     }
+    std::string LExpr::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        if (isField_) {
+            std::string obj_var = obj_->generateRExprCode(file, indent,
+                    thisClass, thisMethod);
+            bool failed = false;;
+            ClassStruct *obj_type = obj_->getType(thisClass, thisMethod, 
+                    failed);
+            ClassStruct *field_type = obj_type->fieldTable[this->name_].first;
+            for (int i=0; i < indent; i++) { file << "\t"; }
+            std::string this_var = "temp" + std::to_string(this->tempVarID++);
+            file << "obj_" << field_type->name << " " << this_var << " = " 
+                    << obj_var << "->field_" << this->name_ << ";" << std::endl;
+            return this_var;
+        } else {
+            return "local_" + this->name_;
+        }
+        return "";
+    }
 
 /* Assignment */
     void Assignment::json(std::ostream &out, unsigned int indent) {
@@ -1633,6 +1707,19 @@ namespace AST {
             }
         }
     }
+    void Assignment::generateCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string r_expr_var = r_expr_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        std::string l_expr_var = l_expr_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        bool failed = false;
+        ClassStruct *l_expr_type = this->l_expr_->getType(thisClass, thisMethod,
+                failed);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << l_expr_var << " = (obj_" << l_expr_type->name << ")"
+                << r_expr_var << ";" << std::endl;
+    }
 
 /* Return */
     void Return::json(std::ostream &out, unsigned int indent) {
@@ -1780,12 +1867,28 @@ namespace AST {
         this->json_int(out, indent, "val_", this->val_);
         this->json_close(out, indent);
     }
+    std::string IntLit::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string tmpName = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "obj_Int " << tmpName << " = int_literal(" << this->val_ << ");"
+                << std::endl;
+        return tmpName;
+    }
 
 /* StrLit */
     void StrLit::json(std::ostream &out, unsigned int indent) {
         this->json_head(out, indent, "String");
         this->json_string(out, indent, "text_", this->text_);
         this->json_close(out, indent);
+    }
+    std::string StrLit::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string tmpName = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "obj_String " << tmpName << " = str_literal(\"" << this->text_ 
+                << "\");" << std::endl;
+        return tmpName;
     }
 
 /* Call */
@@ -1896,6 +1999,31 @@ namespace AST {
         }
         return nullptr;
     }
+    std::string Call::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string objVar = obj_->generateRExprCode(file, indent, thisClass,
+                thisMethod);
+        std::vector<std::string> args;
+        for (RExpr* expr : *this->args_) {
+            args.push_back(expr->generateRExprCode(file, indent, thisClass,
+                    thisMethod));
+        }
+        bool failed = false;
+        ClassStruct *objType = obj_->getType(thisClass, thisMethod, failed);
+        MethodStruct *ms = objType->methodTable[this->mthd_];
+        ClassStruct *thisType = ms->clazz;
+        ClassStruct *retType = objType->methodTable[this->mthd_]->type;
+        std::string tmpName = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "obj_" << retType->name << " " << tmpName << " = " << 
+                objVar << "->class->" << this->mthd_ << "((obj_"
+                << thisType->name << ")" << objVar;
+        for (std::string arg : args) {
+            file << ", " << arg;
+        }
+        file << ");" << std::endl;
+        return tmpName;
+    }
 
 /* Constructor */
     void Constructor::json(std::ostream &out, unsigned int indent) {
@@ -1968,6 +2096,15 @@ namespace AST {
             }
         }
         return this->classTable[this->name_];
+    }
+    std::string Constructor::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        ClassStruct *type = this->classTable[this->name_];
+        std::string tmpVar = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "obj_" << type->name << " " << tmpVar << " = new_" << type->name
+                << "();" << std::endl;
+        return tmpVar;
     }
 
 /* And */
