@@ -1143,15 +1143,6 @@ namespace AST {
                         " = &the_class_" << curr->name << "_struct;" << std::endl;
             }
         }
-        /*
-        for (Class *c : *this->classes_) {
-            ClassStruct *cs = c->getClassStruct();
-            file << "struct class_" << cs->name << "_struct the_class_"
-                    << cs->name << "_struct;" << std::endl;
-            file << "class_" << cs->name << " the_class_" << cs->name << " = "
-                    << "&the_class_" << cs->name << "_struct;" << std::endl;
-        }
-         */
         file << "int main() {" << std::endl;
         file << "}" << std::endl;
         
