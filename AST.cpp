@@ -1120,7 +1120,7 @@ namespace AST {
             }
             file << "};" << std::endl << std::endl;
         }
-        file << "// Forward-declare constructors" << std::endl;
+        file << "// Forward-declare methods" << std::endl;
         for (Class *c : *this->classes_) {
             ClassStruct *cs = c->getClassStruct();
             file << "obj_" << cs->name << " new_" << cs->name << "(";
@@ -1131,8 +1131,48 @@ namespace AST {
                 sep = ", ";
             }
             file << ");" << std::endl;
+            for (Method *m : *c->getMethods()) {
+                MethodStruct *ms = m->getMethodStruct();
+                std::vector<std::string> argNames = m->getArgNames();
+                file << "obj_" << ms->type->name << " " << cs->name
+                        << "_method_" << ms->name << "(obj_" << cs->name <<
+                        " this";
+                for (TypedArg* arg : *m->getArgs()) {
+                    file << ", obj_" << arg->getType() << " local_"
+                            << arg->getName();
+                }
+                file << ");" << std::endl;
+            }
+            file << std::endl;
         }
         file << std::endl;
+        
+        //Class Instances
+        std::stack<ClassStruct*> S;
+        S.push(this->builtinTypes["Obj"]);
+        while (!S.empty()) {
+            ClassStruct *curr = S.top();
+            S.pop();
+            for (ClassStruct *child : curr->children) {
+                S.push(child);
+            }
+            if (this->builtinTypes.find(curr->name) ==
+                    this->builtinTypes.end()) {
+                file << "struct class_" << curr->name << "_struct the_class_"
+                        << curr->name << "_struct = {" << std::endl;
+                file << "\t.super = &the_class_" << curr->super->name
+                        << "_struct";
+                for (MethodStruct *ms : curr->methodOrder) {
+                    file << "," << std::endl << "\t." << ms->name << " = "
+                            << ms->clazz->name << "_method_" << ms->name;
+                }
+                file << std::endl << "};" << std::endl;
+                file << "const class_" << curr->name << " the_class_"
+                        << curr->name << " = &the_class_" << curr->name
+                        << "_struct;" << std::endl;
+            }
+        }
+        
         for (Class *c : *this->classes_) {
             ClassStruct *cs = c->getClassStruct();
             file << "// " << cs->name << " Methods" << std::endl;
@@ -1161,6 +1201,7 @@ namespace AST {
             file << "\tobj_" << cs->name << " this = (obj_" << cs->name
                     << ")malloc(sizeof(*this));"
                     << std::endl;
+            file << "\tthis->class = the_class_" << cs->name << ";" << std::endl;
             file << std::endl;
             for (Statement *s : *c->getStatements()) {
                 s->generateCode(file, 1, cs, cs->constructor);
@@ -1201,32 +1242,6 @@ namespace AST {
             file << std::endl;
         }
         
-        //Class Instances
-        std::stack<ClassStruct*> S;
-        S.push(this->builtinTypes["Obj"]);
-        while (!S.empty()) {
-            ClassStruct *curr = S.top();
-            S.pop();
-            for (ClassStruct *child : curr->children) {
-                S.push(child);
-            }
-            if (this->builtinTypes.find(curr->name) ==
-                    this->builtinTypes.end()) {
-                file << "struct class_" << curr->name << "_struct the_class_"
-                        << curr->name << "_struct = {" << std::endl;
-                file << "\t.super = &the_class_" << curr->super->name
-                        << "_struct";
-                for (MethodStruct *ms : curr->methodOrder) {
-                    file << "," << std::endl << "\t." << ms->name << " = "
-                            << ms->clazz->name << "_method_" << ms->name;
-                }
-                file << std::endl << "};" << std::endl;
-                file << "const class_" << curr->name << " the_class_"
-                        << curr->name << " = &the_class_" << curr->name
-                        << "_struct;" << std::endl;
-            }
-        }
-        
         //Program Body
         file << "int main() {" << std::endl;
         for (auto localKeyValue : this->body_->symbolTable) {
@@ -1258,6 +1273,20 @@ namespace AST {
     void RExpr::updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &failed) {
         this->getType(thisClass, thisMethod, failed);
+    }
+    void RExpr::generateBranchCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod,
+            std::string trueLabel, std::string falseLabel) {
+        std::string condVar = this->generateRExprCode(file, indent, thisClass,
+                thisMethod);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "if (" << condVar << " == lit_true) {" << std::endl;
+        for (int i = 0; i < indent + 1; i++) { file << "\t"; }
+        file << "goto " << trueLabel << ";" << std::endl;
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "}" << std::endl;
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "goto " << falseLabel << ";" << std::endl;
     }
 
 /* If */
@@ -1372,21 +1401,28 @@ namespace AST {
     }
     void If::generateCode(std::ostream &file, int indent,
             ClassStruct *thisClass, MethodStruct *thisMethod) {
-        std::string trueLabel = "label" + std::to_string(this->labelID++);
-        std::string falseLabel = "label" + std::to_string(this->labelID++);
+        std::string trueLabel = "LABEL" + std::to_string(this->labelID++) +
+                "_TRUE";
+        std::string falseLabel = "LABEL" + std::to_string(this->labelID++) +
+                "_FALSE";
         this->cond_->generateBranchCode(file, indent, thisClass, thisMethod,
                 trueLabel, falseLabel);
-        file << trueLabel << ": ;" << std::endl;
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << trueLabel << ":;" << std::endl;
         for (Statement *s : *this->if_true_stmts_) {
-            s->generateCode(file, indent+1, thisClass, thisMethod);
+            s->generateCode(file, indent, thisClass, thisMethod);
         }
-        std::string done = "label" + std::to_string(this->labelID++);
+        std::string done = "LABEL" + std::to_string(this->labelID++) +
+                "_DONE";
+        for (int i = 0; i < indent; i++) { file << "\t"; }
         file << "goto " << done << ";" << std::endl;
-        file << falseLabel << ": ;" << std::endl;
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << falseLabel << ":;" << std::endl;
         for (Statement *s : *this->if_false_stmts_) {
-            s->generateCode(file, indent+1, thisClass, thisMethod);
+            s->generateCode(file, indent, thisClass, thisMethod);
         }
-        file << done << ": ;" << std::endl;
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << done << ":;" << std::endl;
     }
 
 /* While */
@@ -1451,6 +1487,28 @@ namespace AST {
         // While loops cannot have a definite return because they can't be
         // guaranteed to run at least once.
         return std::make_pair(retType, false);
+    }
+    void While::generateCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string testLabel = "LABEL" + std::to_string(this->labelID++) +
+                "_TEST";
+        std::string againLabel = "LABEL" + std::to_string(this->labelID++) +
+                "_AGAIN";
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "goto " << testLabel << ";" << std::endl;
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << againLabel << ":;" << std::endl;
+        for (Statement *s : *this->stmts_) {
+            s->generateCode(file, indent, thisClass, thisMethod);
+        }
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << testLabel << ":;" << std::endl;
+        std::string doneLabel = "LABEL" + std::to_string(this->labelID++) +
+                "_DONE";
+        this->cond_->generateBranchCode(file, indent, thisClass, thisMethod,
+                againLabel, doneLabel);
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << doneLabel << ":;" << std::endl;
     }
 
 /* LExpr */
@@ -1555,21 +1613,6 @@ namespace AST {
             return "local_" + this->name_;
         }
         return "";
-    }
-    void LExpr::generateBranchCode(std::ostream &file, int indent,
-                ClassStruct *thisClass, MethodStruct *thisMethod,
-                std::string trueLabel, std::string falseLabel) {
-        
-        std::string condVar = this->generateRExprCode(file, indent, thisClass,
-                thisMethod);
-        for (int i = 0; i < indent; i++) { file << "\t"; }
-        file << "if (" << condVar << " == lit_true) {" << std::endl;
-        for (int i = 0; i < indent+1; i++) { file << "\t"; }
-        file << "goto " << trueLabel << ";" << std::endl;
-        for (int i = 0; i < indent; i++) { file << "\t"; }
-        file << "}" << std::endl;
-        for (int i = 0; i < indent; i++) { file << "\t"; }
-        file << "goto " << falseLabel << ";" << std::endl;
     }
 
 /* Assignment */
@@ -1853,6 +1896,22 @@ namespace AST {
             return std::make_pair(retType, true);
         }
     }
+    void Return::generateCode(std::ostream& file, int indent,
+            ClassStruct* thisClass, MethodStruct* thisMethod) {
+        
+        
+        if (returnsNone_) {
+            for (int i = 0; i < indent; i++) { file << "\t"; }
+            file << "return (obj_" << thisMethod->type->name << ")lit_none;"
+                    << std::endl;
+        } else {
+            std::string retVar = this->r_expr_->generateRExprCode(file, indent,
+                    thisClass, thisMethod);
+            for (int i = 0; i < indent; i++) { file << "\t"; }
+            file << "return (obj_" << thisMethod->type->name << ")" << retVar
+                    << ";" << std::endl;
+        }
+    }
 
 /* Typecase */
     void Typecase::json(std::ostream &out, unsigned int indent) {
@@ -1940,6 +1999,41 @@ namespace AST {
             }
         }
         return std::make_pair(retType, false);
+    }
+    void Typecase::generateCode(std::ostream &file, int indent, ClassStruct *thisClass,
+	    MethodStruct *thisMethod) {
+        std::string exprVar = this->expr_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        std::string currVar = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "class_Obj " << currVar << " = " << exprVar << "->class;"
+                << std::endl;
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "while (" << currVar << ") {" << std::endl;
+        for (int i = 0; i < indent + 1; i++) { file << "\t"; }
+        for (TypeAlt *alt : *this->alternatives_) {
+            file << "if (" << currVar << " == (class_Obj)the_class_"
+                    << alt->getType() << ") {" << std::endl;
+            for (int i = 0; i < indent + 2; i++) { file << "\t"; }
+            file << "local_" << alt->getName() << " = (obj_"
+                    << alt->getType() << ")" << exprVar << ";" << std::endl;
+            for (Statement *s : *alt->getStatements()) {
+                s->generateCode(file, indent+2, thisClass, thisMethod);
+            }
+            for (int i = 0; i < indent + 2; i++) { file << "\t"; }
+            file << "break;" << std::endl;
+            for (int i = 0; i < indent + 1; i++) { file << "\t"; }
+            file << "} else ";
+        }
+        file << "{" << std::endl;
+        for (int i = 0; i < indent + 2; i++) { file << "\t"; }
+        file << currVar << " = " << currVar << "->super;"
+                << std::endl;
+        for (int i = 0; i < indent + 1; i++) { file << "\t"; }
+        file << "}" << std::endl;
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "}" << std::endl;
+        
     }
 
 /* IntLit */
@@ -2281,6 +2375,33 @@ namespace AST {
         }
         return this->builtinTypes["Boolean"];
     }
+    void And::generateBranchCode(std::ostream& file, int indent,
+            ClassStruct* thisClass, MethodStruct* thisMethod,
+            std::string trueLabel, std::string falseLabel) {
+        std::string halfLabel = "LABEL" + std::to_string(this->labelID++) +
+                "_HALF";
+        this->lhs_->generateBranchCode(file, indent, thisClass, thisMethod,
+                halfLabel, falseLabel);
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << halfLabel << ":;" << std::endl;
+        this->rhs_->generateBranchCode(file, indent, thisClass, thisMethod,
+                trueLabel, falseLabel);
+    }
+    std::string And::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string lhsVar = this->lhs_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        std::string rhsVar = this->rhs_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        std::string retVar = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "obj_Boolean " << retVar << " = lit_false;" << std::endl;
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "if (" << lhsVar << " == lit_true && " << rhsVar
+                << " == lit_true) { " << retVar << " = lit_true; }"
+                << std::endl;
+        return retVar;
+    }
 
 /* Or */
     void Or::json(std::ostream &out, unsigned int indent) {
@@ -2341,6 +2462,33 @@ namespace AST {
         }
         return this->builtinTypes["Boolean"];
     }
+    void Or::generateBranchCode(std::ostream& file, int indent,
+            ClassStruct* thisClass, MethodStruct* thisMethod,
+            std::string trueLabel, std::string falseLabel) {
+        std::string halfLabel = "LABEL" + std::to_string(this->labelID++) +
+                "_HALF";
+        this->lhs_->generateBranchCode(file, indent, thisClass, thisMethod,
+                trueLabel, halfLabel);
+        for (int i = 0; i < indent - 1; i++) { file << "\t"; }
+        file << halfLabel << ":;" << std::endl;
+        this->rhs_->generateBranchCode(file, indent, thisClass, thisMethod,
+                trueLabel, falseLabel);
+    }
+    std::string Or::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string lhsVar = this->lhs_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        std::string rhsVar = this->rhs_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        std::string retVar = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "obj_Boolean " << retVar << " = lit_false;" << std::endl;
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "if (" << lhsVar << " == lit_true || " << rhsVar
+                << " == lit_true) { " << retVar << " = lit_true; }"
+                << std::endl;
+        return retVar;
+    }
 
 /* Not */
     void Not::json(std::ostream &out, unsigned int indent) {
@@ -2378,6 +2526,24 @@ namespace AST {
             failed = true;
         }
         return this->builtinTypes["Boolean"];
+    }
+    void Not::generateBranchCode(std::ostream& file, int indent,
+            ClassStruct* thisClass, MethodStruct* thisMethod,
+            std::string trueLabel, std::string falseLabel) {
+        this->expr_->generateBranchCode(file, indent, thisClass, thisMethod,
+                falseLabel, trueLabel);
+    }
+    std::string Not::generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) {
+        std::string exprVar = this->expr_->generateRExprCode(file, indent,
+                thisClass, thisMethod);
+        std::string retVar = "temp" + std::to_string(this->tempVarID++);
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "obj_Boolean " << retVar << " = lit_true;" << std::endl;
+        for (int i = 0; i < indent; i++) { file << "\t"; }
+        file << "if (" << exprVar << " == lit_true) { " << retVar
+                << " = lit_false; }" << std::endl;
+        return retVar;
     }
 
 }  // namespace AST

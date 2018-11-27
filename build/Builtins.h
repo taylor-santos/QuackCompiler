@@ -245,10 +245,12 @@ extern obj_Int int_literal(int n);
  * inherit visible to user code 
  *================================
  */
+obj_Obj new_Obj();
 obj_String Obj_method_STR(obj_Obj this);
 obj_Nothing Obj_method_PRINT(obj_Obj this); 
 obj_Boolean Obj_method_EQUALS(obj_Obj this, obj_Obj other); 
 
+obj_String new_String();
 obj_String String_method_STR(obj_String this);
 obj_String String_method_PRINT(obj_String this); 
 obj_Boolean String_method_EQUALS(obj_String this, obj_Obj other); 
@@ -258,10 +260,13 @@ obj_Boolean String_method_ATLEAST(obj_String this, obj_String other);
 obj_Boolean String_method_ATMOST(obj_String this, obj_String other); 
 obj_String String_method_PLUS(obj_String this, obj_String other); 
 
+obj_Boolean new_Boolean();
 obj_String Boolean_method_STR(obj_Boolean this); 
 
+obj_Nothing new_Nothing();
 obj_String Nothing_method_STR(obj_Nothing this);
 
+obj_Int new_Int();
 obj_String Int_method_STR(obj_Int this); 
 obj_Boolean Int_method_EQUALS(obj_Int this, obj_Obj other);
 obj_Boolean Int_method_LESS(obj_Int this, obj_Int other);

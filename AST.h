@@ -98,9 +98,7 @@ class Statement : public ASTNode {
     virtual std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed);
     virtual void generateCode(std::ostream &file, int indent,
-            ClassStruct *thisClass, MethodStruct *thisMethod) {
-	std::cout << "Error: unfinished Statement!" << std::endl; 
-    }
+            ClassStruct *thisClass, MethodStruct *thisMethod) = 0;
 };
 
 class Method : public ASTNode {
@@ -205,13 +203,10 @@ class RExpr : public Statement {
 	    MethodStruct *thisMethod) final { this->generateRExprCode(file,
 		    indent, thisClass, thisMethod); }
     virtual std::string generateRExprCode(std::ostream &file, int indent,
-            ClassStruct *thisClass, MethodStruct *thisMethod) {
-	std::cout << "Unfinished RExpr!" << std::endl;
-	return "";
-    }
+            ClassStruct *thisClass, MethodStruct *thisMethod) = 0;
     virtual void generateBranchCode(std::ostream &file, int indent,
 	    ClassStruct *thisClass, MethodStruct *thisMethod,
-	    std::string trueLabel, std::string falseLabel) {}
+	    std::string trueLabel, std::string falseLabel);
 };
 
 class If : public Statement {
@@ -256,6 +251,8 @@ class While : public Statement {
             MethodStruct *thisMethod, bool &failed) override;
     void updateTypes(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &changed, bool &failed) override;
+    void generateCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class LExpr : public RExpr {
@@ -281,9 +278,6 @@ class LExpr : public RExpr {
             bool &failed) override;
     std::string generateRExprCode(std::ostream &file, int indent,
             ClassStruct *thisClass, MethodStruct *thisMethod) override;
-    void generateBranchCode(std::ostream &file, int indent,
-	    ClassStruct *thisClass, MethodStruct *thisMethod,
-	    std::string trueLabel, std::string falseLabel) override;
 };
 
 class Assignment : public Statement {
@@ -325,6 +319,8 @@ class Return : public Statement {
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    void generateCode(std::ostream &file, int indent, ClassStruct *thisClass,
+	    MethodStruct *thisMethod) override;
 };
 
 class Typecase : public Statement {
@@ -343,6 +339,8 @@ class Typecase : public Statement {
     std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    void generateCode(std::ostream &file, int indent, ClassStruct *thisClass,
+	    MethodStruct *thisMethod) override;
 };
 
 class IntLit : public RExpr {
@@ -417,6 +415,11 @@ class And : public RExpr {
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    void generateBranchCode(std::ostream &file, int indent,
+	    ClassStruct *thisClass, MethodStruct *thisMethod,
+	    std::string trueLabel, std::string falseLabel) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class Or : public RExpr {
@@ -432,6 +435,11 @@ class Or : public RExpr {
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    void generateBranchCode(std::ostream &file, int indent,
+	    ClassStruct *thisClass, MethodStruct *thisMethod,
+	    std::string trueLabel, std::string falseLabel) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 
 class Not : public RExpr {
@@ -446,6 +454,11 @@ class Not : public RExpr {
     ClassStruct *getType(ClassStruct *thisClass, MethodStruct *thisMethod,
             bool &failed) override;
     void json(std::ostream &out, unsigned int indent = 0) override;
+    void generateBranchCode(std::ostream &file, int indent,
+	    ClassStruct *thisClass, MethodStruct *thisMethod,
+	    std::string trueLabel, std::string falseLabel) override;
+    std::string generateRExprCode(std::ostream &file, int indent,
+            ClassStruct *thisClass, MethodStruct *thisMethod) override;
 };
 }  // namespace AST
 #endif  // AST_H_

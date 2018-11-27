@@ -85,6 +85,7 @@ const class_Obj the_class_Obj = &the_class_Obj_struct;
 obj_String new_String(  ) {
   obj_String new_thing = (obj_String) malloc(sizeof(struct obj_String_struct));
   new_thing->class = the_class_String;
+  new_thing->text = "";
   return new_thing; 
 }
 
@@ -191,10 +192,7 @@ obj_String str_literal(char *s) {
  */
 /* Constructor */
 obj_Boolean new_Boolean(  ) {
-  obj_Boolean new_thing = (obj_Boolean)
-    malloc(sizeof(struct obj_Boolean_struct));
-  new_thing->class = the_class_Boolean;
-  return new_thing; 
+    return lit_false;
 }
 
 /* Boolean:STR */
