@@ -34,6 +34,13 @@
 /* The following object types are "known" from Obj, in the 
  * sense that there are Obj methods that return these types. 
  */
+struct class_Nothing_struct;
+typedef struct class_Nothing_struct* class_Nothing; 
+
+typedef struct obj_Nothing_struct {
+  class_Nothing class;
+} * obj_Nothing;
+
 struct obj_String_struct;
 typedef struct obj_String_struct* obj_String;
 
@@ -63,7 +70,7 @@ struct class_Obj_struct {
   /* Method table */ //THIS ORDER IS GOOD TODO add it to the others
   void *super;
   obj_Boolean (*EQUALS) (obj_Obj, obj_Obj);     
-  obj_Obj (*PRINT) (obj_Obj);
+  obj_Nothing (*PRINT) (obj_Obj);
   obj_String (*STR) (obj_Obj);
 }; 
 extern struct class_Obj_struct the_class_Obj_struct;
@@ -92,7 +99,7 @@ struct class_String_struct {
   /* Method table: Inherited or overridden */
   class_Obj super;  /* Super Class Pointer */
   obj_Boolean (*EQUALS) (obj_String, obj_Obj);      /* Overidden */
-  obj_Obj (*PRINT) (obj_Obj);                /* Inherited */
+  obj_Nothing (*PRINT) (obj_Obj);                /* Inherited */
   obj_String (*STR) (obj_String);               /* Overidden */
   
   /* Method table: Introduced */
@@ -133,7 +140,7 @@ struct class_Boolean_struct {
   class_Obj super;      /* Super Class Pointer */
   /* Method table: Inherited or overridden */
   obj_Boolean (*EQUALS) (obj_Obj, obj_Obj); /* Inherited */ 
-  obj_Obj (*PRINT) (obj_Obj);               /* Inherited */
+  obj_Nothing (*PRINT) (obj_Obj);               /* Inherited */
   obj_String (*STR) (obj_Boolean);       /* Overridden */
 };
 
@@ -161,12 +168,6 @@ extern obj_Boolean lit_true;
  * ==============
  */
 
-struct class_Nothing_struct;
-typedef struct class_Nothing_struct* class_Nothing; 
-
-typedef struct obj_Nothing_struct {
-  class_Nothing class;
-} * obj_Nothing;
 
 /* Although there is little reason to call methods on the none
  * object, the only instance of Nothing, we could call PRINT on 
@@ -177,16 +178,16 @@ struct class_Nothing_struct {
   class_Obj super;  /* Super Class Pointer */
   /* Method table */
   obj_Boolean (*EQUALS) (obj_Obj, obj_Obj); /* Inherited */
-  obj_Obj (*PRINT) (obj_Obj);               /* Inherited */
+  obj_Nothing (*PRINT) (obj_Obj);               /* Inherited */
   obj_String (*STR) (obj_Nothing);       /* Overridden */
 }; 
 
 extern class_Nothing the_class_Nothing;
 
 /* There is a single instance of Nothing, 
- * called nothing
+ * called none
  */
-extern obj_Nothing nothing;
+extern obj_Nothing none;
 
 /* ================
  * Int
@@ -215,7 +216,7 @@ struct class_Int_struct {
   class_Obj super;
   /* Method table: Inherited or overridden */
   obj_Boolean (*EQUALS) (obj_Int, obj_Obj); /* Overridden */
-  obj_Obj (*PRINT) (obj_Obj);      /* Inherited */
+  obj_Nothing (*PRINT) (obj_Obj);      /* Inherited */
   obj_String (*STR) (obj_Int);  /* Overridden */
   /* Method Table: Introduced */
   obj_Boolean (*ATLEAST) (obj_Int, obj_Int);   /* Introduced */
@@ -251,6 +252,11 @@ obj_Boolean Obj_method_EQUALS(obj_Obj this, obj_Obj other);
 obj_String String_method_STR(obj_String this);
 obj_String String_method_PRINT(obj_String this); 
 obj_Boolean String_method_EQUALS(obj_String this, obj_Obj other); 
+obj_Boolean String_method_LESS(obj_String this, obj_String other); 
+obj_Boolean String_method_MORE(obj_String this, obj_String other); 
+obj_Boolean String_method_ATLEAST(obj_String this, obj_String other); 
+obj_Boolean String_method_ATMOST(obj_String this, obj_String other); 
+obj_String String_method_PLUS(obj_String this, obj_String other); 
 
 obj_String Boolean_method_STR(obj_Boolean this); 
 
@@ -259,6 +265,13 @@ obj_String Nothing_method_STR(obj_Nothing this);
 obj_String Int_method_STR(obj_Int this); 
 obj_Boolean Int_method_EQUALS(obj_Int this, obj_Obj other);
 obj_Boolean Int_method_LESS(obj_Int this, obj_Int other);
+obj_Boolean Int_method_MORE(obj_Int this, obj_Int other);
+obj_Boolean Int_method_ATLEAST(obj_Int this, obj_Int other);
+obj_Boolean Int_method_ATMOST(obj_Int this, obj_Int other);
+obj_Int Int_method_MINUS(obj_Int this, obj_Int other);
+obj_Int Int_method_DIVIDE(obj_Int this, obj_Int other);
+obj_Int Int_method_TIMES(obj_Int this, obj_Int other);
 obj_Int Int_method_PLUS(obj_Int this, obj_Int other);
+obj_Int Int_method_NEGATE(obj_Int this);
 
 #endif
