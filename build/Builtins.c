@@ -44,7 +44,7 @@ obj_String Obj_method_STR(obj_Obj this) {
 
 /* Obj:PRINT */
 obj_Nothing Obj_method_PRINT(obj_Obj this) {
-  obj_String str = this->class->STR(this);
+  obj_String str = this->class->method_STR(this);
   fprintf(stdout, "%s", str->text);
   return lit_none;
 }

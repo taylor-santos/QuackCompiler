@@ -69,9 +69,9 @@ typedef struct obj_Obj_struct {
 struct class_Obj_struct {
   /* Method table */ //THIS ORDER IS GOOD TODO add it to the others
   void *super;
-  obj_Boolean (*EQUALS) (obj_Obj, obj_Obj);     
-  obj_Nothing (*PRINT) (obj_Obj);
-  obj_String (*STR) (obj_Obj);
+  obj_Boolean (*method_EQUALS) (obj_Obj, obj_Obj);     
+  obj_Nothing (*method_PRINT) (obj_Obj);
+  obj_String (*method_STR) (obj_Obj);
 }; 
 extern struct class_Obj_struct the_class_Obj_struct;
 extern class_Obj const the_class_Obj; /* Initialized in Builtins.c */
@@ -98,16 +98,16 @@ typedef struct obj_String_struct {
 struct class_String_struct {
   /* Method table: Inherited or overridden */
   class_Obj super;  /* Super Class Pointer */
-  obj_Boolean (*EQUALS) (obj_String, obj_Obj);      /* Overidden */
-  obj_Nothing (*PRINT) (obj_Obj);                /* Inherited */
-  obj_String (*STR) (obj_String);               /* Overidden */
+  obj_Boolean (*method_EQUALS) (obj_String, obj_Obj);      /* Overidden */
+  obj_Nothing (*method_PRINT) (obj_Obj);                /* Inherited */
+  obj_String (*method_STR) (obj_String);               /* Overidden */
   
   /* Method table: Introduced */
-  obj_Boolean (*ATLEAST) (obj_String, obj_String);     /* Introduced */
-  obj_Boolean (*ATMOST) (obj_String, obj_String);     /* Introduced */
-  obj_Boolean (*LESS) (obj_String, obj_String);     /* Introduced */
-  obj_Boolean (*MORE) (obj_String, obj_String);     /* Introduced */
-  obj_String (*PLUS) (obj_String, obj_String);     /* Introduced */
+  obj_Boolean (*method_ATLEAST) (obj_String, obj_String);     /* Introduced */
+  obj_Boolean (*method_ATMOST) (obj_String, obj_String);     /* Introduced */
+  obj_Boolean (*method_LESS) (obj_String, obj_String);     /* Introduced */
+  obj_Boolean (*method_MORE) (obj_String, obj_String);     /* Introduced */
+  obj_String (*method_PLUS) (obj_String, obj_String);     /* Introduced */
 };
 
 extern class_String the_class_String;
@@ -139,9 +139,9 @@ typedef struct obj_Boolean_struct {
 struct class_Boolean_struct {
   class_Obj super;      /* Super Class Pointer */
   /* Method table: Inherited or overridden */
-  obj_Boolean (*EQUALS) (obj_Obj, obj_Obj); /* Inherited */ 
-  obj_Nothing (*PRINT) (obj_Obj);               /* Inherited */
-  obj_String (*STR) (obj_Boolean);       /* Overridden */
+  obj_Boolean (*method_EQUALS) (obj_Obj, obj_Obj); /* Inherited */ 
+  obj_Nothing (*method_PRINT) (obj_Obj);               /* Inherited */
+  obj_String (*method_STR) (obj_Boolean);       /* Overridden */
 };
 
 extern class_Boolean the_class_Boolean; 
@@ -177,9 +177,9 @@ extern obj_Boolean lit_true;
 struct class_Nothing_struct {
   class_Obj super;  /* Super Class Pointer */
   /* Method table */
-  obj_Boolean (*EQUALS) (obj_Obj, obj_Obj); /* Inherited */
-  obj_Nothing (*PRINT) (obj_Obj);               /* Inherited */
-  obj_String (*STR) (obj_Nothing);       /* Overridden */
+  obj_Boolean (*method_EQUALS) (obj_Obj, obj_Obj); /* Inherited */
+  obj_Nothing (*method_PRINT) (obj_Obj);               /* Inherited */
+  obj_String (*method_STR) (obj_Nothing);       /* Overridden */
 }; 
 
 extern class_Nothing the_class_Nothing;
@@ -215,19 +215,19 @@ typedef struct obj_Int_struct {
 struct class_Int_struct {
   class_Obj super;
   /* Method table: Inherited or overridden */
-  obj_Boolean (*EQUALS) (obj_Int, obj_Obj); /* Overridden */
-  obj_Nothing (*PRINT) (obj_Obj);      /* Inherited */
-  obj_String (*STR) (obj_Int);  /* Overridden */
+  obj_Boolean (*method_EQUALS) (obj_Int, obj_Obj); /* Overridden */
+  obj_Nothing (*method_PRINT) (obj_Obj);      /* Inherited */
+  obj_String (*method_STR) (obj_Int);  /* Overridden */
   /* Method Table: Introduced */
-  obj_Boolean (*ATLEAST) (obj_Int, obj_Int);   /* Introduced */
-  obj_Boolean (*ATMOST) (obj_Int, obj_Int);   /* Introduced */
-  obj_Int (*DIVIDE) (obj_Int, obj_Int);       /* Introduced */
-  obj_Boolean (*LESS) (obj_Int, obj_Int);   /* Introduced */
-  obj_Int (*MINUS) (obj_Int, obj_Int);       /* Introduced */
-  obj_Boolean (*MORE) (obj_Int, obj_Int);   /* Introduced */
-  obj_Int (*NEGATE) (obj_Int);               /* Introduced */
-  obj_Int (*PLUS) (obj_Int, obj_Int);       /* Introduced */
-  obj_Int (*TIMES) (obj_Int, obj_Int);       /* Introduced */
+  obj_Boolean (*method_ATLEAST) (obj_Int, obj_Int);   /* Introduced */
+  obj_Boolean (*method_ATMOST) (obj_Int, obj_Int);   /* Introduced */
+  obj_Int (*method_DIVIDE) (obj_Int, obj_Int);       /* Introduced */
+  obj_Boolean (*method_LESS) (obj_Int, obj_Int);   /* Introduced */
+  obj_Int (*method_MINUS) (obj_Int, obj_Int);       /* Introduced */
+  obj_Boolean (*method_MORE) (obj_Int, obj_Int);   /* Introduced */
+  obj_Int (*method_NEGATE) (obj_Int);               /* Introduced */
+  obj_Int (*method_PLUS) (obj_Int, obj_Int);       /* Introduced */
+  obj_Int (*method_TIMES) (obj_Int, obj_Int);       /* Introduced */
 };
 
 

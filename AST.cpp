@@ -1102,7 +1102,7 @@ namespace AST {
             file << "struct class_" << cs->name << "_struct {" << std::endl;
             file << "\tclass_" << cs->super->name << "\tsuper;" << std::endl;
             for (MethodStruct *ms : cs->methodOrder) {
-                file << "\tobj_" << ms->type->name << "\t(*" << ms->name
+                file << "\tobj_" << ms->type->name << "\t(*method_" << ms->name
                         << ") (" << "obj_" << ms->clazz->name;
                 for (ClassStruct *argType : ms->argTypes) {
                     file << ", obj_" << argType->name;
@@ -1163,8 +1163,9 @@ namespace AST {
                 file << "\t.super = &the_class_" << curr->super->name
                         << "_struct";
                 for (MethodStruct *ms : curr->methodOrder) {
-                    file << "," << std::endl << "\t." << ms->name << " = "
-                            << ms->clazz->name << "_method_" << ms->name;
+                    file << "," << std::endl << "\t.method_" << ms->name
+                            << " = " << ms->clazz->name << "_method_"
+                            << ms->name;
                 }
                 file << std::endl << "};" << std::endl;
                 file << "const class_" << curr->name << " the_class_"
@@ -2214,7 +2215,7 @@ namespace AST {
         std::string tmpName = "temp" + std::to_string(this->tempVarID++);
         for (int i = 0; i < indent; i++) { file << "\t"; }
         file << "obj_" << retType->name << " " << tmpName << " = " << 
-                objVar << "->class->" << this->mthd_ << "((obj_"
+                objVar << "->class->method_" << this->mthd_ << "((obj_"
                 << thisType->name << ")" << objVar;
         for (auto arg : args) {
             file << ", (obj_" << arg.second->name << ")" << arg.first;
