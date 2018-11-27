@@ -94,6 +94,7 @@ class Statement : public ASTNode {
             bool &failed) = 0;
     virtual std::pair<ClassStruct*, bool> getReturnType(ClassStruct *thisClass,
             MethodStruct *thisMethod, bool &failed);
+    
 };
 
 class Method : public ASTNode {
