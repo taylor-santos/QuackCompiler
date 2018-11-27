@@ -187,7 +187,7 @@ extern class_Nothing the_class_Nothing;
 /* There is a single instance of Nothing, 
  * called none
  */
-extern obj_Nothing none;
+extern obj_Nothing lit_none;
 
 /* ================
  * Int

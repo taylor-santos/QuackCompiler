@@ -46,7 +46,7 @@ obj_String Obj_method_STR(obj_Obj this) {
 obj_Nothing Obj_method_PRINT(obj_Obj this) {
   obj_String str = this->class->STR(this);
   fprintf(stdout, "%s", str->text);
-  return none;
+  return lit_none;
 }
 
 /* Obj:EQUALS (Note we may want to replace this */
@@ -177,7 +177,7 @@ class_String the_class_String = &the_class_String_struct;
  */
 obj_String str_literal(char *s) {
   obj_String str = new_String(); 
-  str->text = s;
+  str->text = strdut(s);
   return str;
 }
 
@@ -249,7 +249,7 @@ obj_Boolean lit_true = &lit_true_struct;
  */
 /*  Constructor */
 obj_Nothing new_Nothing(  ) {
-  return none; 
+  return lit_none; 
 }
 
 /* Nothing:STR */
@@ -279,7 +279,7 @@ class_Nothing the_class_Nothing = &the_class_Nothing_struct;
  */ 
 struct obj_Nothing_struct none_struct =
   { &the_class_Nothing_struct };
-obj_Nothing none = &none_struct; 
+obj_Nothing lit_none = &none_struct; 
 
 /* ================
  * Int
