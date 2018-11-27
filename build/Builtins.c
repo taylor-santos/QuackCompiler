@@ -43,10 +43,10 @@ obj_String Obj_method_STR(obj_Obj this) {
 
 
 /* Obj:PRINT */
-obj_Obj Obj_method_PRINT(obj_Obj this) {
+obj_Nothing Obj_method_PRINT(obj_Obj this) {
   obj_String str = this->class->STR(this);
   fprintf(stdout, "%s", str->text);
-  return this;
+  return none;
 }
 
 /* Obj:EQUALS (Note we may want to replace this */
@@ -249,7 +249,7 @@ obj_Boolean lit_true = &lit_true_struct;
  */
 /*  Constructor */
 obj_Nothing new_Nothing(  ) {
-  return nothing; 
+  return none; 
 }
 
 /* Nothing:STR */
@@ -277,9 +277,9 @@ class_Nothing the_class_Nothing = &the_class_Nothing_struct;
  * This is the only instance of class Nothing that 
  * should ever exist
  */ 
-struct obj_Nothing_struct nothing_struct =
+struct obj_Nothing_struct none_struct =
   { &the_class_Nothing_struct };
-obj_Nothing nothing = &nothing_struct; 
+obj_Nothing none = &none_struct; 
 
 /* ================
  * Int
