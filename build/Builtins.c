@@ -34,8 +34,8 @@ obj_Obj new_Obj(  ) {
 /* Obj:STR */
 obj_String Obj_method_STR(obj_Obj this) {
   long addr = (long) this;
-  char *rep[64];
-  sprintf(&rep, "<Object at %ld>", addr);
+  char rep[64];
+  sprintf(rep, "<Object at %ld>", addr);
   obj_String str = str_literal(rep); 
   return str;
 }
@@ -304,8 +304,8 @@ obj_Int new_Int(  ) {
 
 /* Int:STR */
 obj_String Int_method_STR(obj_Int this) {
-  char *rep[16];
-  sprintf(&rep, "%d", this->value);
+  char rep[16];
+  sprintf(rep, "%d", this->value);
   return str_literal(rep); 
 }
 
