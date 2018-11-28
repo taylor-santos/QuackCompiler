@@ -1,9 +1,8 @@
-# CMake script for building very simple parser
-# with bison and 'reflex' scanner generator.
+# CMake script for building the Quack Compiler.
 #
 #
 cmake_minimum_required(VERSION 3.12)
-project(AST)
+project(QuackCompiler)
 set(CMAKE_CXX_STANDARD 14)
 
 # Where are the reflex include and library files?
@@ -17,25 +16,27 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 add_custom_command(
         OUTPUT lex.yy.cpp lex.yy.h
-        COMMAND   reflex --bison-cc --bison-locations --header-file ${CMAKE_CURRENT_SOURCE_DIR}/quack.lxx
-        DEPENDS quack.lxx quack.tab.hxx
+        COMMAND reflex --bison-cc --bison-locations --header-file ${CMAKE_CURRENT_SOURCE_DIR}/src/quack.lxx
+        COMMAND mv lex.* build/
+        DEPENDS src/quack.lxx quack.tab.hxx
 )
 add_custom_command(
         OUTPUT quack.tab.cxx quack.tab.hxx location.hh position.hh stack.hh
-        COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/quack.yxx
-        DEPENDS quack.yxx
+        COMMAND bison -d ${CMAKE_CURRENT_SOURCE_DIR}/src/quack.yxx
+        COMMAND mv quack.* *.hh build/
+        DEPENDS src/quack.yxx
 )
 
 include_directories(
         ${CMAKE_CURRENT_BINARY_DIR}
         ${REFLEX_INCLUDE}
-        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 
 add_executable(qcc
-        quack.tab.cxx lex.yy.cpp lex.yy.h
+        build/quack.tab.cxx build/lex.yy.cpp build/lex.yy.h
 
-        main.cpp parser.h AST.h AST.cpp Messages.h Messages.cpp CodegenContext.cpp CodegenContext.h)
+        src/main.cpp include/parser.h include/AST.h src/AST.cpp include/Messages.h src/Messages.cpp)
 
 target_link_libraries(qcc ${REFLEX_LIB})

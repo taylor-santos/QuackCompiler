@@ -2,8 +2,8 @@
 // Created by Michal Young on 9/15/18.
 //
 
-#include "Messages.h"
-#include "location.hh"
+#include "include/Messages.h"
+#include "build/location.hh"
 
 namespace report {
 

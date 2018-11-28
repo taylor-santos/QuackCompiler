@@ -3,10 +3,9 @@
 // and a lexer object.
 //
 
-#include "lex.yy.h"
-#include "EvalContext.h"
-#include "Messages.h"
-#include "AST.h"
+#include "build/lex.yy.h"
+#include "include/Messages.h"
+#include "include/AST.h"
 
 class Driver {
  public:

@@ -1,4 +1,4 @@
-#include "./AST.h"
+#include "include/AST.h"
 
 template<class T>
 std::vector<T> difference(std::vector<T> a, std::vector<T> b) {

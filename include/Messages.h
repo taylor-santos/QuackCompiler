@@ -10,7 +10,7 @@
 #ifndef AST_MESSAGES_H
 #define AST_MESSAGES_H
 
-# include "location.hh"
+# include "build/location.hh"
 # include <string>
 
 // Error reporting in one place, so that we can count number of errors,
