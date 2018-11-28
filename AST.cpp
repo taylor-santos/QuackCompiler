@@ -1235,8 +1235,19 @@ namespace AST {
                     }
                 }
                 file << std::endl;
+                bool absoluteReturn = false;
                 for (Statement *s : *m->getStatements()) {
                     s->generateCode(file, 1, cs, ms);
+                    bool failed = false;
+                    auto retType = s->getReturnType(cs, ms, failed);
+                    if (retType.first != nullptr) {
+                        if (retType.second) {
+                            absoluteReturn = true;
+                        }
+                    }
+                }
+                if (!absoluteReturn) {
+                    file << "\treturn lit_none;" << std::endl;
                 }
                 file << "}" << std::endl;
             }
@@ -2007,7 +2018,7 @@ namespace AST {
                 thisClass, thisMethod);
         std::string currVar = "temp" + std::to_string(this->tempVarID++);
         for (int i = 0; i < indent; i++) { file << "\t"; }
-        file << "class_Obj " << currVar << " = " << exprVar << "->class;"
+        file << "class_Obj " << currVar << " = (class_Obj)" << exprVar << "->class;"
                 << std::endl;
         for (int i = 0; i < indent; i++) { file << "\t"; }
         file << "while (" << currVar << ") {" << std::endl;
