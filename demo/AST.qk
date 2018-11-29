@@ -1,0 +1,102 @@
+/*
+    Abstract Syntax Tree
+    Arithmetic Expressions
+    Quacked by Alonzo Altamirano - 11/2018
+*/
+
+class Printer() { 
+    def println(obj: Obj) {
+        obj.PRINT();
+        this.feed();
+    }
+    def print(obj: Obj) {
+        obj.PRINT();
+    }
+    def feed() {
+        "\n".PRINT();
+    }
+
+    def printAST(n: AST_Node) {
+        this.feed();
+        this.print(n);
+        this.print(" = ");
+        this.println(n.eval());
+        this.feed();
+    }
+}
+
+class AST_Node() {
+    def eval() : Int {
+        return 0;
+    }
+}
+
+class AST_Int(i : Int) extends AST_Node {
+    this.i = i;
+    def eval() : Int {
+        return this.i;
+    }
+    def STR() : String {
+        return this.i.STR();
+    }
+}
+
+class AST_Plus(l : AST_Node, r : AST_Node) extends AST_Node {
+    this.l = l;
+    this.r = r;
+
+    def eval() : Int {
+        return this.l.eval() + this.r.eval();
+    }
+    def STR() : String {
+        return "(" + this.l.STR() + "+" + this.r.STR() + ")";
+    }
+}
+class AST_Minus(l : AST_Node, r : AST_Node) extends AST_Node {
+    this.l = l;
+    this.r = r;
+
+    def eval() : Int {
+        return this.l.eval() - this.r.eval();
+    }
+    def STR() : String {
+        return "(" + this.l.STR() + "-" + this.r.STR() + ")";
+    }
+}
+class AST_Mult(l : AST_Node, r : AST_Node) extends AST_Node {
+    this.l = l;
+    this.r = r;
+
+    def eval() : Int {
+        return this.l.eval() * this.r.eval();
+    }
+    def STR() : String {
+        return "(" + this.l.STR() + "*" + this.r.STR() + ")";
+    }
+}
+class AST_Div(l : AST_Node, r : AST_Node) extends AST_Node {
+    this.l = l;
+    this.r = r;
+
+    def eval() : Int {
+        return this.l.eval() / this.r.eval();
+    }
+    def STR() : String {
+        return "(" + this.l.STR() + "/" + this.r.STR() + ")";
+    }
+}
+
+//MAIN
+
+p = Printer();
+
+a = AST_Plus(AST_Int(1), AST_Minus(AST_Int(2), AST_Int(3)));
+b = AST_Plus(AST_Plus(AST_Int(1), AST_Int(2)), 
+        AST_Mult(AST_Int(3), AST_Int (4)));
+c = AST_Div(AST_Mult(AST_Int(612), AST_Plus(AST_Int(01234), 
+        AST_Minus(AST_Int(613), AST_Int(161)))), 
+        AST_Div(AST_Int(36), AST_Int(6)));
+
+p.printAST(a);
+p.printAST(b);
+p.printAST(c);
