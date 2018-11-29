@@ -1,0 +1,26 @@
+/*
+    Demonstration of if/elif/else construct
+    Quacked by Alonzo Altamirano - 11/2018
+*/
+
+a = "foo";
+b = "bar";
+c = 42;
+d = true;
+e = none;
+
+if c > 3 + 2 and not a == b {
+    "Real".PRINT();
+}
+elif not d or d {
+    "ducks".PRINT();
+}
+elif not e == none {
+    "dont".PRINT();
+}
+elif a == a and b == b or c >= 2718 and d {
+    "eat".PRINT();
+}
+else {
+    "geese".PRINT();
+}

@@ -1,4 +1,5 @@
 # Quack C Compiler(qcc)
+##### A Fully Functional Quack Compiler
 ##### By Alonzo Altamirano & Taylor Santos
 ---
 ### Our Interpretations of Quack Language Ambiguities:
@@ -46,6 +47,6 @@ make
 ## Examples
 * `./qcc demo/sort.qk` "Produces the file sort.c in the current directory."
 * `./qcc -v demo/sort.qk` "Prints the AST information to stdout."
-* `./qcc -e demo/sort.qk` "Produces the executable a.out in the current directory."
+* `./qcc -e demo/sort.qk` "Produces the executable a.out and the file sort.c in the current directory."
 * `./qcc -c my_file.c demo/sort.qk` "Produces the file my_file.c in the current directory."
-* `./qcc -o my_exec demo/sort.qk` "Produces the executable my_exec in the current directory."
+* `./qcc -o my_exec demo/sort.qk` "Produces the executable my_exec and the file sort.c in the current directory."
