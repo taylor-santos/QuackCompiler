@@ -6,6 +6,7 @@
 #include "build/lex.yy.h"
 #include "include/Messages.h"
 #include "include/AST.h"
+#include <fstream>
 
 class Driver {
  public:
@@ -25,9 +26,13 @@ class Driver {
         }
         return true;
     }
-    void genCode(std::ostream &file) {
+    void genCode(const std::string &filename) {
 	if (this->parsed && this->typeChecked) {
-	    this->root->genCode(file);
+        std::ostream *stream;
+        std::ofstream file;
+        file.open(filename);
+        stream = &file;
+	    this->root->genCode(*stream);
 	}
     }
     void json(std::ostream &out){
